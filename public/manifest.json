@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "AI Email Assistant for Gmail",
+  "version": "1.0.0",
+  "description": "Craft perfect emails directly in Gmail using AI.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "action": {
+    "default_popup": "index.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["index.html", "assets/*"],
+      "matches": ["https://mail.google.com/*"]
+    }
+  ],
+  "icons": {
+    "16": "vite.svg",
+    "48": "vite.svg",
+    "128": "vite.svg"
+  }
+}
