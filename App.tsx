@@ -3,6 +3,7 @@ import { EmailDraft, EmailMode, Tone, ApiProvider, OverlayContextPayload, Provid
 import { generateEmails } from './services/geminiService';
 import { generateEmailsWithPerplexity } from './services/perplexityService';
 import { generateEmailsWithGPT } from './services/gptService';
+import { generateEmailsWithNemotron } from './services/nemotronService';
 import { analyzeThreadContext } from './services/contextEngine';
 import { TONES } from './constants';
 import ToneSelector from './components/ToneSelector';
@@ -120,7 +121,7 @@ const App: React.FC = () => {
     }
 
     const storedProvider = localStorage.getItem('api_provider') as ApiProvider | null;
-    if (storedProvider === 'perplexity' || storedProvider === 'gemini' || storedProvider === 'openrouter') {
+    if (storedProvider === 'perplexity' || storedProvider === 'gemini' || storedProvider === 'openrouter' || storedProvider === 'nemotron') {
       setApiProvider(storedProvider);
     }
 
@@ -161,7 +162,8 @@ const App: React.FC = () => {
     if (
       (resolvedProvider === 'gemini' && !hasGeminiKey) ||
       (resolvedProvider === 'perplexity' && !hasPerplexityKey) ||
-      (resolvedProvider === 'openrouter' && !hasOpenrouterKey)
+      (resolvedProvider === 'openrouter' && !hasOpenrouterKey) ||
+      (resolvedProvider === 'nemotron' && !hasOpenrouterKey)
     ) {
       setIsSettingsModalOpen(true);
     }
@@ -225,6 +227,7 @@ const App: React.FC = () => {
   const isCurrentApiKeyValid = (): boolean => {
     if (apiProvider === 'gemini') return apiKey.trim().length > 0;
     if (apiProvider === 'perplexity') return perplexityApiKey.trim().length > 0;
+    if (apiProvider === 'nemotron') return openrouterApiKey.trim().length > 0;
     return openrouterApiKey.trim().length > 0;
   };
 
@@ -300,6 +303,8 @@ const App: React.FC = () => {
         result = await generateEmailsWithPerplexity(userInput, enrichedContext, writingStyleSample, emailMode, Array.from(selectedTones), perplexityApiKey, signature, includeSignature);
       } else if (apiProvider === 'openrouter') {
         result = await generateEmailsWithGPT(userInput, enrichedContext, writingStyleSample, emailMode, Array.from(selectedTones), openrouterApiKey, signature, includeSignature);
+      } else if (apiProvider === 'nemotron') {
+        result = await generateEmailsWithNemotron(userInput, enrichedContext, writingStyleSample, emailMode, Array.from(selectedTones), openrouterApiKey, signature, includeSignature);
       } else {
         result = await generateEmails(userInput, enrichedContext, writingStyleSample, emailMode, Array.from(selectedTones), apiKey, signature, includeSignature);
       }
@@ -329,21 +334,27 @@ const App: React.FC = () => {
               <div className="flex rounded-lg bg-gray-700 p-1">
                 <button
                   onClick={() => setApiProvider('gemini')}
-                  className={`w-1/3 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'gemini' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                  className={`w-1/4 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'gemini' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                 >
                   Google Gemini
                 </button>
                 <button
                   onClick={() => setApiProvider('perplexity')}
-                  className={`w-1/3 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'perplexity' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                  className={`w-1/4 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'perplexity' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                 >
                   Perplexity
                 </button>
                 <button
                   onClick={() => setApiProvider('openrouter')}
-                  className={`w-1/3 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'openrouter' ? 'bg-green-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                  className={`w-1/4 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'openrouter' ? 'bg-green-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                 >
                   GPT (OpenRouter)
+                </button>
+                <button
+                  onClick={() => setApiProvider('nemotron')}
+                  className={`w-1/4 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'nemotron' ? 'bg-teal-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                >
+                  Nemotron (Leader)
                 </button>
               </div>
             </div>
@@ -377,9 +388,9 @@ const App: React.FC = () => {
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-300 mb-2">OpenRouter API Key (GPT)</label>
+              <label className="block text-sm font-semibold text-gray-300 mb-2">OpenRouter API Key (GPT / Nemotron)</label>
               <p className="text-gray-400 text-xs mb-2 leading-relaxed">
-                Your key is stored locally in your browser and never sent to our servers. Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">openrouter.ai</a>.
+                Your key is stored locally in your browser and never sent to our servers. Used for both GPT (OpenRouter) and Nemotron (Leader) providers. Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">openrouter.ai</a>.
               </p>
               <input
                 type="password"
