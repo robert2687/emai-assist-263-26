@@ -7,9 +7,16 @@
   xsi:type="MailApp">
 
   <!-- ═══════════════════════════════════════════════════════════════════════
+       NOTE: All localhost:3000 URLs below must be replaced with the
+       production HTTPS URL of the deployed add-in before sideloading or
+       submitting to AppSource.  Icon resources should also be replaced with
+       properly sized PNG files (16×16, 32×32, 80×80).
+  ═══════════════════════════════════════════════════════════════════════ -->
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
        Basic metadata
   ═══════════════════════════════════════════════════════════════════════ -->
-  <Id>00000000-0000-0000-0000-000000000001</Id>
+  <Id>6adc53d9-5bbb-4b3a-afd2-13a7d070ed99</Id>
   <Version>1.0.0.0</Version>
   <ProviderName>AI Email Assistant</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>

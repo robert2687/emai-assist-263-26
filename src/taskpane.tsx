@@ -25,8 +25,9 @@ import { analyzeThreadContext } from './context/contextEngineV2';
 
 // These env vars must be set at build time via `VITE_MSAL_CLIENT_ID` and
 // `VITE_MSAL_TENANT_ID` in the project's .env file.
-const MSAL_CLIENT_ID = (import.meta as Record<string, unknown> & { env: Record<string, string> }).env.VITE_MSAL_CLIENT_ID ?? '';
-const MSAL_TENANT_ID = (import.meta as Record<string, unknown> & { env: Record<string, string> }).env.VITE_MSAL_TENANT_ID ?? 'common';
+const env = import.meta.env as Record<string, string>;
+const MSAL_CLIENT_ID = env.VITE_MSAL_CLIENT_ID ?? '';
+const MSAL_TENANT_ID = env.VITE_MSAL_TENANT_ID ?? 'common';
 
 // Inject synthetic query params so App initialises in extension mode.
 (function patchSearchParams() {

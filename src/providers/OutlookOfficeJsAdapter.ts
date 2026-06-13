@@ -70,7 +70,7 @@ export class OutlookOfficeJsAdapter extends BaseAdapter {
           return;
         }
         item.body.setAsync(
-          this.sanitizeInsertedHtml(payload.html!),
+          this.sanitizeInsertedHtml(payload.html),
           { coercionType: Office.CoercionType.Html },
           (result) => {
             if (result.status === Office.AsyncResultStatus.Succeeded) {
