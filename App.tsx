@@ -124,14 +124,24 @@ const App: React.FC = () => {
       setApiProvider(storedProvider);
     }
 
-    const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
-    if (envKey) {
-      setApiKey(envKey);
+    const storedKey = localStorage.getItem('gemini_api_key');
+    if (storedKey) {
+      setApiKey(storedKey);
+    } else {
+      const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+      if (envKey) {
+        setApiKey(envKey);
+      }
     }
 
-    const envPplxKey = process.env.PERPLEXITY_API_KEY || '';
-    if (envPplxKey) {
-      setPerplexityApiKey(envPplxKey);
+    const storedPerplexityKey = localStorage.getItem('perplexity_api_key');
+    if (storedPerplexityKey) {
+      setPerplexityApiKey(storedPerplexityKey);
+    } else {
+      const envPplxKey = process.env.PERPLEXITY_API_KEY || '';
+      if (envPplxKey) {
+        setPerplexityApiKey(envPplxKey);
+      }
     }
 
     const storedOpenrouterKey = localStorage.getItem('openrouter_api_key');
