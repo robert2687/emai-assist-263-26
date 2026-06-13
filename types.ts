@@ -1,6 +1,8 @@
 
 export type EmailMode = 'Formal' | 'Friendly';
 
+export type ApiProvider = 'gemini' | 'perplexity';
+
 export type Tone = 'Confident' | 'Empathetic' | 'Assertive' | 'Humorous' | 'Concise' | 'Detailed';
 
 export interface EmailDraft {
