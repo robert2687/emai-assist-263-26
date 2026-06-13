@@ -1,135 +1,190 @@
+import { analyzeThreadContext } from '../services/contextEngine';
+import { OverlayContextPayload } from '../types';
+import { ComposeSurface, getMailProviderAdapter, MailProviderAdapter } from './providerAdapters';
 
-/**
- * Content script for Gmail integration.
- * This script injects a button into the Gmail compose window.
- */
-
-const INJECTED_BUTTON_ID = 'ai-email-assistant-btn';
+const TRIGGER_ATTRIBUTE = 'data-ai-email-assistant-trigger';
 const SIDEBAR_ID = 'ai-email-assistant-sidebar';
+const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
 
-function injectButton() {
-  // Gmail's compose window toolbar
-  const toolbars = document.querySelectorAll('.btC');
-  
-  toolbars.forEach(toolbar => {
-    if (toolbar.querySelector(`#${INJECTED_BUTTON_ID}`)) return;
+let activeAdapter: MailProviderAdapter = getMailProviderAdapter(window.location.hostname);
+let activeSurface: ComposeSurface | null = null;
+let sidebar: HTMLDivElement | null = null;
+let iframe: HTMLIFrameElement | null = null;
 
-    const btnContainer = document.createElement('div');
-    btnContainer.id = INJECTED_BUTTON_ID;
-    btnContainer.className = 'wG J-Z-I';
-    btnContainer.style.display = 'inline-flex';
-    btnContainer.style.alignItems = 'center';
-    btnContainer.style.marginLeft = '8px';
-    btnContainer.style.cursor = 'pointer';
-    btnContainer.title = 'AI Email Assistant';
+type OverlayMessage =
+  | { type: 'READY_FOR_CONTEXT' | 'REFRESH_CONTEXT' | 'OPEN_CALENDAR' }
+  | { type: 'INSERT_EMAIL' | 'INSERT_SUBJECT'; text: string };
 
-    btnContainer.innerHTML = `
-      <div role="button" class="T-I J-J5-Ji aoO v7 T-I-atl L3" style="background-color: #4285f4; color: white; border-radius: 4px; padding: 0 12px; height: 36px; display: flex; alignItems: center;">
-        <span style="font-weight: bold;">AI Write</span>
-      </div>
-    `;
+const buildOverlayPayload = (): OverlayContextPayload => {
+  const fallbackSurface = activeAdapter.findComposeSurfaces()[0] ?? { root: document.body, toolbar: document.body };
+  const surface = activeSurface ?? fallbackSurface;
+  const threadContext = activeAdapter.extractThreadContext(surface.root);
 
-    btnContainer.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleSidebar(toolbar);
-    });
+  return {
+    provider: activeAdapter.id,
+    capabilities: activeAdapter.capabilities,
+    threadContext,
+    analysis: analyzeThreadContext(threadContext),
+  };
+};
 
-    // Find the "Send" button container and insert after it
-    const sendBtn = toolbar.querySelector('.T-I.J-J5-Ji.aoO.v7.T-I-atl.L3');
-    if (sendBtn && sendBtn.parentElement) {
-      sendBtn.parentElement.appendChild(btnContainer);
-    }
-  });
-}
-
-function toggleSidebar(toolbar: Element) {
-  let sidebar = document.getElementById(SIDEBAR_ID);
-  
-  if (sidebar) {
-    sidebar.style.display = sidebar.style.display === 'none' ? 'block' : 'none';
+const postContextToOverlay = (type: 'INIT_CONTEXT' | 'CONTEXT_REFRESHED'): void => {
+  if (!iframe?.contentWindow) {
     return;
   }
 
-  // Create sidebar
+  iframe.contentWindow.postMessage({ type, payload: buildOverlayPayload() }, extensionOrigin);
+};
+
+const ensureSidebar = (): void => {
+  if (sidebar && iframe) {
+    sidebar.style.display = 'block';
+    postContextToOverlay('CONTEXT_REFRESHED');
+    return;
+  }
+
   sidebar = document.createElement('div');
   sidebar.id = SIDEBAR_ID;
   sidebar.style.position = 'fixed';
   sidebar.style.right = '0';
   sidebar.style.top = '0';
-  sidebar.style.width = '400px';
+  sidebar.style.width = '420px';
   sidebar.style.height = '100%';
   sidebar.style.backgroundColor = '#111827';
-  sidebar.style.boxShadow = '-2px 0 10px rgba(0,0,0,0.5)';
+  sidebar.style.boxShadow = '-2px 0 10px rgba(0,0,0,0.45)';
   sidebar.style.zIndex = '9999';
   sidebar.style.borderLeft = '1px solid #374151';
   sidebar.style.display = 'block';
 
-  // Header
   const header = document.createElement('div');
   header.style.padding = '16px';
   header.style.display = 'flex';
   header.style.justifyContent = 'space-between';
   header.style.alignItems = 'center';
   header.style.borderBottom = '1px solid #374151';
-  header.innerHTML = `
-    <h2 style="color: #60a5fa; margin: 0; font-size: 18px;">AI Email Assistant</h2>
-    <button id="close-ai-sidebar" style="background: none; border: none; color: #9ca3af; cursor: pointer; font-size: 20px;">&times;</button>
-  `;
+  const titleGroup = document.createElement('div');
+  const title = document.createElement('h2');
+  title.textContent = 'Email Intelligence Hub';
+  title.style.color = '#60a5fa';
+  title.style.margin = '0';
+  title.style.fontSize = '18px';
+
+  const subtitle = document.createElement('p');
+  subtitle.textContent = `${activeAdapter.label} context engine`;
+  subtitle.style.color = '#9ca3af';
+  subtitle.style.margin = '4px 0 0';
+  subtitle.style.fontSize = '12px';
+
+  const closeButton = document.createElement('button');
+  closeButton.id = 'close-ai-sidebar';
+  closeButton.setAttribute('aria-label', 'Close assistant sidebar');
+  closeButton.textContent = '×';
+  closeButton.style.background = 'none';
+  closeButton.style.border = 'none';
+  closeButton.style.color = '#9ca3af';
+  closeButton.style.cursor = 'pointer';
+  closeButton.style.fontSize = '20px';
+
+  titleGroup.appendChild(title);
+  titleGroup.appendChild(subtitle);
+  header.appendChild(titleGroup);
+  header.appendChild(closeButton);
   sidebar.appendChild(header);
 
-  // Iframe to load the app
-  const iframe = document.createElement('iframe');
-  // Load the local extension index.html
-  const appUrl = chrome.runtime.getURL('index.html'); 
-  iframe.src = `${appUrl}?extension=true`;
+  iframe = document.createElement('iframe');
+  iframe.src = `${chrome.runtime.getURL('index.html')}?extension=true&provider=${activeAdapter.id}`;
   iframe.style.width = '100%';
-  iframe.style.height = 'calc(100% - 60px)';
+  iframe.style.height = 'calc(100% - 74px)';
   iframe.style.border = 'none';
+  iframe.addEventListener('load', () => postContextToOverlay('INIT_CONTEXT'));
   sidebar.appendChild(iframe);
 
   document.body.appendChild(sidebar);
 
-  document.getElementById('close-ai-sidebar')?.addEventListener('click', () => {
-    if (sidebar) sidebar.style.display = 'none';
-  });
-
-  // Listen for messages from the iframe — restrict to this extension's origin only
-  const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
-  window.addEventListener('message', (event) => {
-    if (event.origin !== extensionOrigin) return;
-    if (event.data.type === 'INSERT_EMAIL') {
-      insertTextIntoGmail(event.data.text, toolbar);
+  header.querySelector('#close-ai-sidebar')?.addEventListener('click', () => {
+    if (sidebar) {
+      sidebar.style.display = 'none';
     }
   });
-}
+};
 
-function insertTextIntoGmail(text: string, toolbar: Element) {
-  // Find the compose body
-  // Gmail uses contenteditable divs for compose
-  const composeWindow = toolbar.closest('.M9');
-  if (!composeWindow) return;
+const createTrigger = (surface: ComposeSurface): HTMLDivElement => {
+  const trigger = document.createElement('div');
+  trigger.setAttribute(TRIGGER_ATTRIBUTE, 'true');
+  trigger.className = 'wG J-Z-I';
+  trigger.style.display = 'inline-flex';
+  trigger.style.alignItems = 'center';
+  trigger.style.marginLeft = '8px';
+  trigger.style.cursor = 'pointer';
+  trigger.title = 'Open Email Intelligence Hub';
+  trigger.innerHTML = `
+    <div role="button" aria-label="Open AI email assistant" class="T-I J-J5-Ji aoO v7 T-I-atl L3" style="background-color: #2563eb; color: white; border-radius: 6px; padding: 0 12px; height: 36px; display: flex; align-items: center;">
+      <span style="font-weight: 700;">AI Hub</span>
+    </div>
+  `;
 
-  const editable = composeWindow.querySelector('.Am.Al.editable');
-  if (editable) {
-    // Use safe DOM insertion to avoid HTML injection
-    editable.textContent = '';
-    const lines = text.split('\n');
-    lines.forEach((line, i) => {
-      editable.appendChild(document.createTextNode(line));
-      if (i < lines.length - 1) {
-        editable.appendChild(document.createElement('br'));
-      }
-    });
-    // Trigger input event to make sure Gmail registers the change
-    editable.dispatchEvent(new Event('input', { bubbles: true }));
+  trigger.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    activeSurface = surface;
+    ensureSidebar();
+    postContextToOverlay('CONTEXT_REFRESHED');
+  });
+
+  return trigger;
+};
+
+const injectButtons = (): void => {
+  activeAdapter = getMailProviderAdapter(window.location.hostname);
+
+  activeAdapter.findComposeSurfaces().forEach((surface) => {
+    if (surface.toolbar.querySelector(`[${TRIGGER_ATTRIBUTE}="true"]`)) {
+      return;
+    }
+
+    surface.toolbar.appendChild(createTrigger(surface));
+  });
+};
+
+window.addEventListener('message', (event) => {
+  if (event.origin !== extensionOrigin) {
+    return;
   }
-}
 
-// Observe for changes to inject button when compose window opens
+  const data = event.data as OverlayMessage | undefined;
+  if (!data?.type) {
+    return;
+  }
+
+  const fallbackSurface = activeAdapter.findComposeSurfaces()[0] ?? { root: document.body, toolbar: document.body };
+  const surface = activeSurface ?? fallbackSurface;
+
+  switch (data.type) {
+    case 'READY_FOR_CONTEXT':
+    case 'REFRESH_CONTEXT':
+      postContextToOverlay('CONTEXT_REFRESHED');
+      break;
+    case 'INSERT_EMAIL':
+      if (typeof data.text === 'string') {
+        activeAdapter.insertBodyText(surface.root, data.text);
+      }
+      break;
+    case 'INSERT_SUBJECT':
+      if (typeof data.text === 'string') {
+        activeAdapter.insertSubject(surface.root, data.text);
+      }
+      break;
+    case 'OPEN_CALENDAR':
+      activeAdapter.openCalendar();
+      break;
+    default:
+      break;
+  }
+});
+
 const observer = new MutationObserver(() => {
-  injectButton();
+  injectButtons();
 });
 
 observer.observe(document.body, { childList: true, subtree: true });
-injectButton();
+injectButtons();

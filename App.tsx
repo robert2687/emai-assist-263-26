@@ -1,14 +1,75 @@
-
-import React, { useState, useCallback } from 'react';
-import { EmailDraft, EmailMode, Tone, ApiProvider } from './types';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EmailDraft, EmailMode, Tone, ApiProvider, OverlayContextPayload, ProviderId } from './types';
 import { generateEmails } from './services/geminiService';
 import { generateEmailsWithPerplexity } from './services/perplexityService';
 import { generateEmailsWithGPT } from './services/gptService';
+import { analyzeThreadContext } from './services/contextEngine';
 import { TONES } from './constants';
 import ToneSelector from './components/ToneSelector';
 import EmailCard from './components/EmailCard';
 import Loader from './components/Loader';
 import { SparklesIcon, FeatherIcon } from './components/icons';
+
+const EMAIL_MODES: EmailMode[] = ['Formal', 'Friendly', 'Concise', 'Grant Ready'];
+
+const DEFAULT_CAPABILITIES = {
+  smartReply: true,
+  templates: true,
+  signature: true,
+  summaryInsert: true,
+  subjectSuggestions: true,
+  scheduleSend: false,
+  calendarAdd: false,
+};
+
+const PROVIDER_LABELS: Record<ProviderId, string> = {
+  gmail: 'Gmail',
+  outlook: 'Outlook',
+  zoho: 'Zoho Mail',
+  fallback: 'Webmail',
+};
+
+const TEMPLATE_LIBRARY = [
+  {
+    name: 'Status update',
+    prompt: 'Write a concise project status update with current progress, blockers, and next steps.',
+  },
+  {
+    name: 'Grant response',
+    prompt: 'Draft a grant-ready response that addresses proposal scope, milestones, and compliance expectations.',
+  },
+  {
+    name: 'Meeting follow-up',
+    prompt: 'Draft a polite follow-up email with action items, owners, and proposed next meeting times.',
+  },
+];
+
+const buildGenerationContext = (
+  overlayContext: OverlayContextPayload | null,
+  manualContext: string,
+  summary: string,
+  nextSteps: string[],
+  subjects: string[],
+  classification: string,
+  sentiment: string,
+): string => {
+  const sections = [
+    manualContext.trim(),
+    overlayContext ? `Provider: ${PROVIDER_LABELS[overlayContext.provider]}` : '',
+    overlayContext?.threadContext.subject ? `Detected subject: ${overlayContext.threadContext.subject}` : '',
+    overlayContext?.threadContext.composeMode ? `Compose mode: ${overlayContext.threadContext.composeMode}` : '',
+    overlayContext && overlayContext.threadContext.participants.length > 0
+      ? `Participants: ${overlayContext.threadContext.participants.map((participant) => participant.name).join(', ')}`
+      : '',
+    `Context summary: ${summary}`,
+    `Detected sentiment: ${sentiment}`,
+    `Grant classification: ${classification}`,
+    nextSteps.length > 0 ? `Suggested next steps:\n- ${nextSteps.join('\n- ')}` : '',
+    subjects.length > 0 ? `Suggested subject lines:\n- ${subjects.join('\n- ')}` : '',
+  ];
+
+  return sections.filter(Boolean).join('\n\n').trim();
+};
 
 const App: React.FC = () => {
   const [userInput, setUserInput] = useState<string>('');
@@ -27,11 +88,35 @@ const App: React.FC = () => {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [signature, setSignature] = useState<string>('');
   const [includeSignature, setIncludeSignature] = useState<boolean>(true);
+  const [overlayContext, setOverlayContext] = useState<OverlayContextPayload | null>(null);
+  const [actionStatus, setActionStatus] = useState<string>('');
+  const [providerHint, setProviderHint] = useState<ProviderId>('fallback');
+  const lastSyncedThreadTextRef = useRef<string>('');
+  const hasManualThreadContextEditRef = useRef<boolean>(false);
+  const parentOriginRef = useRef<string>('*');
 
-  React.useEffect(() => {
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('extension') === 'true') {
+    const extensionMode = params.get('extension') === 'true';
+    const providerFromQuery = params.get('provider');
+
+    if (extensionMode) {
       setIsExtensionMode(true);
+      try {
+        parentOriginRef.current = document.referrer ? new URL(document.referrer).origin : '*';
+      } catch {
+        parentOriginRef.current = '*';
+      }
+      window.parent.postMessage({ type: 'READY_FOR_CONTEXT' }, parentOriginRef.current);
+    }
+
+    if (
+      providerFromQuery === 'gmail'
+      || providerFromQuery === 'outlook'
+      || providerFromQuery === 'zoho'
+      || providerFromQuery === 'fallback'
+    ) {
+      setProviderHint(providerFromQuery);
     }
 
     const storedProvider = localStorage.getItem('api_provider') as ApiProvider | null;
@@ -39,24 +124,14 @@ const App: React.FC = () => {
       setApiProvider(storedProvider);
     }
 
-    const storedKey = localStorage.getItem('gemini_api_key');
-    if (storedKey) {
-      setApiKey(storedKey);
-    } else {
-      const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
-      if (envKey) {
-        setApiKey(envKey);
-      }
+    const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+    if (envKey) {
+      setApiKey(envKey);
     }
 
-    const storedPerplexityKey = localStorage.getItem('perplexity_api_key');
-    if (storedPerplexityKey) {
-      setPerplexityApiKey(storedPerplexityKey);
-    } else {
-      const envPplxKey = process.env.PERPLEXITY_API_KEY || '';
-      if (envPplxKey) {
-        setPerplexityApiKey(envPplxKey);
-      }
+    const envPplxKey = process.env.PERPLEXITY_API_KEY || '';
+    if (envPplxKey) {
+      setPerplexityApiKey(envPplxKey);
     }
 
     const storedOpenrouterKey = localStorage.getItem('openrouter_api_key');
@@ -78,6 +153,9 @@ const App: React.FC = () => {
       (resolvedProvider === 'perplexity' && !hasPerplexityKey) ||
       (resolvedProvider === 'openrouter' && !hasOpenrouterKey)
     ) {
+    const hasGeminiKey = !!(process.env.GEMINI_API_KEY || process.env.API_KEY);
+    const hasPerplexityKey = !!process.env.PERPLEXITY_API_KEY;
+    if ((resolvedProvider === 'gemini' && !hasGeminiKey) || (resolvedProvider === 'perplexity' && !hasPerplexityKey)) {
       setIsSettingsModalOpen(true);
     }
 
@@ -85,23 +163,57 @@ const App: React.FC = () => {
     if (storedSignature) {
       setSignature(storedSignature);
     }
+
     const storedIncludeSignature = localStorage.getItem('include_signature');
     if (storedIncludeSignature !== null) {
       setIncludeSignature(storedIncludeSignature === 'true');
     }
   }, []);
 
-  const handleSignatureChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setSignature(val);
-    localStorage.setItem('email_signature', val);
-  };
+  useEffect(() => {
+    const handleOverlayMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; payload?: OverlayContextPayload } | undefined;
+      if (!data?.type || !data.payload) {
+        return;
+      }
 
-  const handleIncludeSignatureToggle = () => {
-    const newVal = !includeSignature;
-    setIncludeSignature(newVal);
-    localStorage.setItem('include_signature', String(newVal));
-  };
+      if (data.type === 'INIT_CONTEXT' || data.type === 'CONTEXT_REFRESHED') {
+        setOverlayContext(data.payload);
+        setProviderHint(data.payload.provider);
+        setEmailContext((current) => {
+          const incomingContext = data.payload.threadContext.threadText || '';
+          const canOverwrite = !hasManualThreadContextEditRef.current || !current.trim();
+          if (canOverwrite) {
+            lastSyncedThreadTextRef.current = incomingContext;
+            hasManualThreadContextEditRef.current = false;
+            return incomingContext;
+          }
+
+          return current;
+        });
+      }
+    };
+
+    window.addEventListener('message', handleOverlayMessage);
+    return () => window.removeEventListener('message', handleOverlayMessage);
+  }, []);
+
+  const derivedThreadContext = useMemo(() => ({
+    provider: overlayContext?.provider ?? providerHint,
+    composeMode: overlayContext?.threadContext.composeMode ?? 'unknown',
+    subject: overlayContext?.threadContext.subject ?? '',
+    participants: overlayContext?.threadContext.participants ?? [],
+    lastMessage: overlayContext?.threadContext.lastMessage ?? '',
+    threadText: emailContext.trim() || overlayContext?.threadContext.threadText || '',
+  }), [emailContext, overlayContext, providerHint]);
+
+  const contextAnalysis = useMemo(
+    () => analyzeThreadContext(derivedThreadContext),
+    [derivedThreadContext],
+  );
+
+  const capabilities = overlayContext?.capabilities ?? DEFAULT_CAPABILITIES;
+  const activeProvider = overlayContext?.provider ?? providerHint;
 
   const isCurrentApiKeyValid = (): boolean => {
     if (apiProvider === 'gemini') return apiKey.trim().length > 0;
@@ -121,20 +233,38 @@ const App: React.FC = () => {
     setIsSettingsModalOpen(false);
   };
 
-  const handleInsertToGmail = useCallback((text: string) => {
-    window.parent.postMessage({ type: 'INSERT_EMAIL', text }, 'https://mail.google.com');
-  }, []);
+  const handleSignatureChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = event.target.value;
+    setSignature(value);
+    localStorage.setItem('email_signature', value);
+  };
+
+  const handleIncludeSignatureToggle = () => {
+    const newValue = !includeSignature;
+    setIncludeSignature(newValue);
+    localStorage.setItem('include_signature', String(newValue));
+  };
 
   const handleToneToggle = useCallback((tone: Tone) => {
-    setSelectedTones(prev => {
-      const newTones = new Set(prev);
-      if (newTones.has(tone)) {
-        newTones.delete(tone);
+    setSelectedTones((previous) => {
+      const next = new Set(previous);
+      if (next.has(tone)) {
+        next.delete(tone);
       } else {
-        newTones.add(tone);
+        next.add(tone);
       }
-      return newTones;
+
+      return next;
     });
+  }, []);
+
+  const postComposerMessage = useCallback((type: string, text?: string) => {
+    window.parent.postMessage(text ? { type, text } : { type }, parentOriginRef.current);
+    setActionStatus(
+      type === 'OPEN_CALENDAR'
+        ? 'Opened the provider calendar in a new tab.'
+        : 'Sent the selected content to the active composer.',
+    );
   }, []);
 
   const handleGenerate = useCallback(async () => {
@@ -147,6 +277,16 @@ const App: React.FC = () => {
     setError(null);
     setGeneratedEmails([]);
 
+    const enrichedContext = buildGenerationContext(
+      overlayContext,
+      emailContext,
+      contextAnalysis.summary,
+      contextAnalysis.nextSteps,
+      contextAnalysis.subjectSuggestions,
+      contextAnalysis.classification,
+      contextAnalysis.sentiment,
+    );
+
     try {
       let result: EmailDraft[];
       if (apiProvider === 'perplexity') {
@@ -157,9 +297,8 @@ const App: React.FC = () => {
         result = await generateEmails(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), apiKey, signature, includeSignature);
       }
       setGeneratedEmails(result);
-    } catch (e: any) {
-      console.error(e);
-      if (e.message === "API Key is required") {
+    } catch (generationError: unknown) {
+      if (generationError instanceof Error && generationError.message === 'API Key is required') {
         setIsSettingsModalOpen(true);
       }
       setError('Failed to generate emails. Please check your API key and try again.');
@@ -171,16 +310,16 @@ const App: React.FC = () => {
   return (
     <div className={`min-h-screen bg-gray-900 text-gray-200 font-sans ${isExtensionMode ? 'p-2' : ''}`}>
       {isSettingsModalOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 p-6 md:p-8 rounded-2xl shadow-2xl border border-gray-700 max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-gray-700 bg-gray-800 p-6 shadow-2xl md:p-8">
+            <h2 className="mb-4 flex items-center gap-2 text-2xl font-bold text-white">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
               Settings
             </h2>
 
             <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-300 mb-2">AI Provider</label>
-              <div className="flex bg-gray-700 rounded-lg p-1">
+              <label className="mb-2 block text-sm font-semibold text-gray-300">AI Provider</label>
+              <div className="flex rounded-lg bg-gray-700 p-1">
                 <button
                   onClick={() => setApiProvider('gemini')}
                   className={`w-1/3 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'gemini' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
@@ -201,32 +340,32 @@ const App: React.FC = () => {
                 </button>
               </div>
             </div>
-            
+
             <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-300 mb-2">Google Gemini API Key</label>
-              <p className="text-gray-400 text-xs mb-2 leading-relaxed">
-                Your key is stored locally in your browser and never sent to our servers.
+              <label className="mb-2 block text-sm font-semibold text-gray-300">Google Gemini API Key</label>
+              <p className="mb-2 text-xs leading-relaxed text-gray-400">
+                Your key is used only for the current session unless you provide it through environment configuration.
               </p>
               <input
                 type="password"
                 value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
+                onChange={(event) => setApiKey(event.target.value)}
                 placeholder="AIzaSy..."
-                className="w-full p-3 bg-gray-900 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                className="w-full rounded-lg border border-gray-600 bg-gray-900 p-3 text-white transition duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-300 mb-2">Perplexity API Key</label>
-              <p className="text-gray-400 text-xs mb-2 leading-relaxed">
-                Your key is stored locally in your browser and never sent to our servers.
+              <label className="mb-2 block text-sm font-semibold text-gray-300">Perplexity API Key</label>
+              <p className="mb-2 text-xs leading-relaxed text-gray-400">
+                Your key is used only for the current session unless you provide it through environment configuration.
               </p>
               <input
                 type="password"
                 value={perplexityApiKey}
-                onChange={(e) => setPerplexityApiKey(e.target.value)}
+                onChange={(event) => setPerplexityApiKey(event.target.value)}
                 placeholder="pplx-..."
-                className="w-full p-3 bg-gray-900 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200"
+                className="w-full rounded-lg border border-gray-600 bg-gray-900 p-3 text-white transition duration-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-500"
               />
             </div>
 
@@ -247,31 +386,28 @@ const App: React.FC = () => {
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-300">Email Signature</label>
-                <label className="flex items-center cursor-pointer">
+                <label className="flex cursor-pointer items-center">
                   <div className="relative">
                     <input type="checkbox" className="sr-only" checked={includeSignature} onChange={handleIncludeSignatureToggle} />
-                    <div className={`block w-10 h-6 rounded-full transition-colors ${includeSignature ? 'bg-blue-500' : 'bg-gray-600'}`}></div>
-                    <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${includeSignature ? 'transform translate-x-4' : ''}`}></div>
+                    <div className={`block h-6 w-10 rounded-full transition-colors ${includeSignature ? 'bg-blue-500' : 'bg-gray-600'}`}></div>
+                    <div className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-white transition-transform ${includeSignature ? 'translate-x-4 transform' : ''}`}></div>
                   </div>
-                  <span className="ml-3 text-xs text-gray-400 font-medium">Include</span>
+                  <span className="ml-3 text-xs font-medium text-gray-400">Include</span>
                 </label>
               </div>
-              <p className="text-gray-400 text-xs mb-2 leading-relaxed">
-                This signature will be automatically appended to your generated emails.
-              </p>
               <textarea
                 value={signature}
                 onChange={handleSignatureChange}
                 placeholder="John Doe&#10;Software Engineer&#10;+1 234 567 890"
-                className="w-full h-24 p-3 bg-gray-900 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 resize-none"
+                className="h-24 w-full resize-none rounded-lg border border-gray-600 bg-gray-900 p-3 text-white transition duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                 disabled={!includeSignature}
               />
             </div>
 
             <div className="flex justify-end gap-3">
-              <button 
-                onClick={() => setIsSettingsModalOpen(false)} 
-                className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              <button
+                onClick={() => setIsSettingsModalOpen(false)}
+                className="rounded-lg bg-gray-700 px-4 py-2 text-white transition-colors hover:bg-gray-600"
               >
                 Cancel
               </button>
@@ -279,6 +415,10 @@ const App: React.FC = () => {
                 onClick={() => saveSettings(apiKey, perplexityApiKey, openrouterApiKey, apiProvider)} 
                 disabled={!isCurrentApiKeyValid()}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              <button
+                onClick={() => saveSettings(apiKey, perplexityApiKey, apiProvider)}
+                disabled={apiProvider === 'gemini' ? !apiKey.trim() : !perplexityApiKey.trim()}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Save Settings
               </button>
@@ -289,83 +429,127 @@ const App: React.FC = () => {
 
       <div className={`${isExtensionMode ? 'w-full' : 'container mx-auto p-4 md:p-8'}`}>
         {!isExtensionMode && (
-          <header className="text-center mb-8 md:mb-12">
-            <h1 className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center gap-3">
-              <FeatherIcon className="w-10 h-10" />
+          <header className="mb-8 text-center md:mb-12">
+            <h1 className="flex items-center justify-center gap-3 bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-4xl font-bold text-transparent md:text-5xl">
+              <FeatherIcon className="h-10 w-10" />
               AI Email Assistant
             </h1>
-            <p className="text-gray-400 mt-2 max-w-2xl mx-auto">
-              Craft the perfect email for any situation. Describe your goal, add context, and let AI generate polished drafts for you.
+            <p className="mx-auto mt-2 max-w-2xl text-gray-400">
+              Provider-agnostic email drafting, context analysis, and smart composer actions across Gmail, Outlook, and Zoho.
             </p>
           </header>
         )}
 
-        <main className={`grid ${isExtensionMode ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'} gap-8`}>
-          <div className={`bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-700 flex flex-col gap-6 ${isExtensionMode ? 'max-h-[600px] overflow-y-auto' : ''}`}>
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label htmlFor="userInput" className="block text-lg font-semibold text-gray-300">
-                  What is this email about?
-                </label>
-                <button 
-                  onClick={() => setIsSettingsModalOpen(true)}
-                  className="text-xs text-gray-400 hover:text-blue-400 flex items-center gap-1 transition-colors"
-                  title="Settings"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  Settings
-                </button>
+        <main className={`grid ${isExtensionMode ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-[1.1fr,0.9fr]'} gap-8`}>
+          <div className={`rounded-2xl border border-gray-700 bg-gray-800 p-6 shadow-lg ${isExtensionMode ? 'max-h-[calc(100vh-1rem)] overflow-y-auto' : ''}`}>
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-white">Email Intelligence Hub</h2>
+                <p className="mt-1 text-sm text-gray-400">
+                  Provider: <span className="font-medium text-blue-300">{PROVIDER_LABELS[activeProvider]}</span>
+                  {overlayContext?.threadContext.composeMode ? ` • Mode: ${overlayContext.threadContext.composeMode}` : ''}
+                </p>
               </div>
+              <button
+                onClick={() => setIsSettingsModalOpen(true)}
+                className="flex items-center gap-1 text-xs text-gray-400 transition-colors hover:text-blue-400"
+                title="Settings"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                Settings
+              </button>
+            </div>
+
+            <div className="mb-6 grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-gray-700 bg-gray-900/60 p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Context Engine v2</p>
+                <h3 className="mt-1 text-sm font-semibold text-white">Thread summary</h3>
+                <p className="mt-2 text-sm leading-relaxed text-gray-300">{contextAnalysis.summary}</p>
+              </div>
+              <div className="rounded-xl border border-gray-700 bg-gray-900/60 p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Grant classification</p>
+                <h3 className="mt-1 text-sm font-semibold capitalize text-white">{contextAnalysis.classification}</h3>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-300">
+                  <span className="rounded-full border border-gray-600 px-2 py-1">Language: {contextAnalysis.language}</span>
+                  <span className="rounded-full border border-gray-600 px-2 py-1">Sentiment: {contextAnalysis.sentiment}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <label htmlFor="userInput" className="mb-2 block text-lg font-semibold text-gray-300">
+                What is this email about?
+              </label>
               <textarea
                 id="userInput"
                 value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                placeholder="e.g., Schedule a meeting with Jane to discuss the Q4 budget."
-                className="w-full h-32 p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 resize-none"
+                onChange={(event) => setUserInput(event.target.value)}
+                placeholder="e.g., Draft a response that confirms the budget review, requests missing attachments, and proposes next steps."
+                className="h-32 w-full resize-none rounded-lg border border-gray-600 bg-gray-700 p-3 transition duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
-            <div>
-              <label htmlFor="emailContext" className="block text-lg font-semibold mb-2 text-gray-300">
-                Email Thread Context (Optional)
+            <div className="mb-6">
+              <label htmlFor="emailContext" className="mb-2 block text-lg font-semibold text-gray-300">
+                Email Thread Context
               </label>
               <textarea
                 id="emailContext"
                 value={emailContext}
-                onChange={(e) => setEmailContext(e.target.value)}
-                placeholder="Paste the previous email thread here for a relevant reply."
-                className="w-full h-40 p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 resize-none"
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  hasManualThreadContextEditRef.current = nextValue !== lastSyncedThreadTextRef.current;
+                  setEmailContext(nextValue);
+                }}
+                placeholder="Paste or refresh the current thread context."
+                className="h-40 w-full resize-none rounded-lg border border-gray-600 bg-gray-700 p-3 transition duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            
-            <div>
-              <label htmlFor="writingStyleSample" className="block text-lg font-semibold mb-2 text-gray-300">
+
+            <div className="mb-6">
+              <label htmlFor="writingStyleSample" className="mb-2 block text-lg font-semibold text-gray-300">
                 Your Writing Style (Optional)
               </label>
               <textarea
                 id="writingStyleSample"
                 value={writingStyleSample}
-                onChange={(e) => setWritingStyleSample(e.target.value)}
-                placeholder="Paste some of your previously sent emails here so the AI can learn your style."
-                className="w-full h-32 p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200 resize-none"
+                onChange={(event) => setWritingStyleSample(event.target.value)}
+                placeholder="Paste examples of your own emails so the AI can mirror your style."
+                className="h-28 w-full resize-none rounded-lg border border-gray-600 bg-gray-700 p-3 transition duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
-            <div>
-              <h3 className="text-lg font-semibold mb-3 text-gray-300">Email Mode</h3>
-              <div className="flex bg-gray-700 rounded-lg p-1">
-                <button
-                  onClick={() => setEmailMode('Formal')}
-                  className={`w-1/2 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${emailMode === 'Formal' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                >
-                  Formal
-                </button>
-                <button
-                  onClick={() => setEmailMode('Friendly')}
-                  className={`w-1/2 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${emailMode === 'Friendly' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
-                >
-                  Friendly
-                </button>
+            <div className="mb-6">
+              <h3 className="mb-3 text-lg font-semibold text-gray-300">Rewrite Mode</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {EMAIL_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setEmailMode(mode)}
+                    className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${emailMode === mode ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="mb-3 text-lg font-semibold text-gray-300">Template Library</h3>
+              <div className="grid gap-2 md:grid-cols-3">
+                {TEMPLATE_LIBRARY.map((template) => (
+                  <button
+                    key={template.name}
+                    onClick={() => {
+                      setUserInput(template.prompt);
+                      setActionStatus(`Loaded the "${template.name}" prompt.`);
+                    }}
+                    className="rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-3 text-left text-sm text-gray-200 transition hover:border-blue-500 hover:bg-gray-900"
+                  >
+                    <span className="block font-semibold text-white">{template.name}</span>
+                    <span className="mt-1 block text-xs text-gray-400">{template.prompt}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -378,22 +562,146 @@ const App: React.FC = () => {
             <button
               onClick={handleGenerate}
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-3 px-6 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-3 font-bold text-white transition-all duration-300 hover:scale-105 hover:from-blue-600 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             >
               {isLoading ? 'Generating...' : 'Generate Emails'}
-              {!isLoading && <SparklesIcon className="w-5 h-5" />}
+              {!isLoading && <SparklesIcon className="h-5 w-5" />}
             </button>
           </div>
 
           <div className="space-y-6">
-            {isExtensionMode && (
-              <div className="bg-blue-900/30 border border-blue-700/50 p-4 rounded-xl text-sm text-blue-200">
-                <p className="font-bold mb-1">Gmail Extension Mode Active</p>
-                <p>Generate drafts and click "Insert to Gmail" to populate your compose window.</p>
+            <div className="rounded-2xl border border-gray-700 bg-gray-800 p-6 shadow-lg">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Context insights</h3>
+                  <p className="text-sm text-gray-400">
+                    Reusable provider-agnostic thread intelligence for the extension and future apps.
+                  </p>
+                </div>
+                {isExtensionMode && (
+                  <button
+                    onClick={() => {
+                      hasManualThreadContextEditRef.current = false;
+                      postComposerMessage('REFRESH_CONTEXT');
+                    }}
+                    className="rounded-lg border border-gray-600 px-3 py-2 text-sm text-gray-200 transition hover:border-blue-500 hover:text-white"
+                  >
+                    Refresh context
+                  </button>
+                )}
               </div>
-            )}
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl bg-gray-900/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Next steps</p>
+                  <ul className="mt-2 space-y-2 text-sm text-gray-300">
+                    {contextAnalysis.nextSteps.map((step) => (
+                      <li key={step} className="rounded-lg border border-gray-700 px-3 py-2">{step}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="rounded-xl bg-gray-900/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Smart subject lines</p>
+                  <div className="mt-2 space-y-2">
+                    {contextAnalysis.subjectSuggestions.map((subject) => (
+                      <button
+                        key={subject}
+                        onClick={() => {
+                          if (isExtensionMode) {
+                            postComposerMessage('INSERT_SUBJECT', subject);
+                          } else {
+                            setUserInput((current) => `${current}${current ? '\n' : ''}Subject idea: ${subject}`);
+                            setActionStatus('Added the subject suggestion to your prompt.');
+                          }
+                        }}
+                        className="w-full rounded-lg border border-gray-700 px-3 py-2 text-left text-sm text-gray-200 transition hover:border-blue-500 hover:bg-gray-900"
+                        disabled={!capabilities.subjectSuggestions}
+                      >
+                        {subject}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl bg-gray-900/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Smart replies</p>
+                  <div className="mt-2 space-y-2">
+                    {contextAnalysis.smartReplies.map((reply) => (
+                      <button
+                        key={reply}
+                        onClick={() => {
+                          setUserInput(reply);
+                          setActionStatus('Loaded a smart reply into the prompt.');
+                        }}
+                        className="w-full rounded-lg border border-gray-700 px-3 py-2 text-left text-sm text-gray-200 transition hover:border-blue-500 hover:bg-gray-900"
+                        disabled={!capabilities.smartReply}
+                      >
+                        {reply}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-gray-900/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-500">Detected items</p>
+                  <div className="mt-2 space-y-3 text-sm text-gray-300">
+                    <div>
+                      <p className="font-semibold text-white">Tasks</p>
+                      <ul className="mt-1 list-disc space-y-1 pl-5">
+                        {contextAnalysis.tasks.length > 0 ? contextAnalysis.tasks.map((task) => <li key={task}>{task}</li>) : <li>No explicit tasks detected.</li>}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white">Deadlines</p>
+                      <ul className="mt-1 list-disc space-y-1 pl-5">
+                        {contextAnalysis.deadlines.length > 0 ? contextAnalysis.deadlines.map((deadline) => <li key={deadline}>{deadline}</li>) : <li>No deadline phrases detected.</li>}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white">Commitments</p>
+                      <ul className="mt-1 list-disc space-y-1 pl-5">
+                        {contextAnalysis.commitments.length > 0 ? contextAnalysis.commitments.map((commitment) => <li key={commitment}>{commitment}</li>) : <li>No commitments detected.</li>}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  onClick={() => postComposerMessage('INSERT_EMAIL', contextAnalysis.summary)}
+                  disabled={!isExtensionMode || !capabilities.summaryInsert}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Insert summary
+                </button>
+                <button
+                  onClick={() => postComposerMessage('OPEN_CALENDAR')}
+                  disabled={!isExtensionMode || !capabilities.calendarAdd}
+                  className="rounded-lg border border-gray-600 px-4 py-2 text-sm font-semibold text-gray-200 transition hover:border-blue-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add to calendar
+                </button>
+                <button
+                  disabled
+                  className="rounded-lg border border-gray-700 px-4 py-2 text-sm font-semibold text-gray-500"
+                  title="Native schedule-send automation is not available yet."
+                >
+                  Schedule send
+                </button>
+              </div>
+
+              {actionStatus && (
+                <div className="mt-4 rounded-lg border border-blue-700/40 bg-blue-900/20 px-3 py-2 text-sm text-blue-200">
+                  {actionStatus}
+                </div>
+              )}
+            </div>
+
             {isLoading && <Loader />}
-            {error && <div className="bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg">{error}</div>}
+            {error && <div className="rounded-lg border border-red-700 bg-red-900/50 p-4 text-red-300">{error}</div>}
+
             {generatedEmails.length > 0 && (
               <div className="space-y-6">
                 {generatedEmails.map((email, index) => (
@@ -401,22 +709,26 @@ const App: React.FC = () => {
                     <EmailCard draft={email} index={index} />
                     {isExtensionMode && (
                       <button
-                        onClick={() => handleInsertToGmail(`${email.body}${email.signature ? `\n\n${email.signature}` : ''}`)}
-                        className="absolute top-4 right-16 px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 transition-colors shadow-lg opacity-0 group-hover:opacity-100"
+                        onClick={() => postComposerMessage(
+                          'INSERT_EMAIL',
+                          `${email.body}${email.signature ? `\n\n${email.signature}` : ''}`,
+                        )}
+                        className="absolute right-16 top-4 rounded bg-blue-600 px-3 py-1 text-xs font-bold text-white opacity-0 shadow-lg transition-colors group-hover:opacity-100 hover:bg-blue-700"
                       >
-                        Insert to Gmail
+                        Insert to composer
                       </button>
                     )}
                   </div>
                 ))}
               </div>
             )}
+
             {!isLoading && generatedEmails.length === 0 && !error && (
-               <div className="h-full flex flex-col items-center justify-center text-center bg-gray-800 p-6 rounded-2xl shadow-lg border border-dashed border-gray-700">
-                  <FeatherIcon className="w-16 h-16 text-gray-600 mb-4" />
-                  <h3 className="text-xl font-semibold text-gray-400">Your generated emails will appear here</h3>
-                  <p className="text-gray-500 mt-1">Fill out the form on the left to get started.</p>
-               </div>
+              <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-gray-700 bg-gray-800 p-6 text-center shadow-lg">
+                <FeatherIcon className="mb-4 h-16 w-16 text-gray-600" />
+                <h3 className="text-xl font-semibold text-gray-300">Generated drafts will appear here</h3>
+                <p className="mt-1 text-gray-500">Use the context engine, templates, and prompt builder to get started.</p>
+              </div>
             )}
           </div>
         </main>

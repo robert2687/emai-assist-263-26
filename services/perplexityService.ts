@@ -35,8 +35,12 @@ EXTENDED CAPABILITIES & BEHAVIOR:
 
   if (emailMode === 'Formal') {
     basePrompt += "\nMODE: Formal. The tone should be respectful, clear, and concise. Avoid slang, contractions, and overly casual language.";
-  } else {
+  } else if (emailMode === 'Friendly') {
     basePrompt += "\nMODE: Friendly. The tone should be warm, engaging, and conversational. You can use contractions and more relaxed language, but maintain grammatical correctness.";
+  } else if (emailMode === 'Concise') {
+    basePrompt += "\nMODE: Concise. Keep the email brief, direct, and action-oriented while preserving clarity and professionalism.";
+  } else {
+    basePrompt += "\nMODE: Grant Ready. Optimise for proposal, budget, compliance, or partner communication workflows. Highlight commitments, deadlines, and next actions with precise wording.";
   }
 
   if (selectedTones.length > 0) {
