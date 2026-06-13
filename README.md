@@ -143,6 +143,16 @@ In extension mode, the overlay:
 - offers smart replies, summary insertion, subject suggestions, and calendar shortcuts
 - inserts generated drafts back into the active composer through provider adapters
 
+### Gmail OAuth2 setup
+
+Gmail thread data is fetched via the Gmail REST API using OAuth2 through `chrome.identity`. Before loading the extension you must:
+
+1. Create an OAuth2 client ID in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (Application type: **Chrome Extension**).
+2. Replace `YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com` in `public/manifest.json` with your real client ID.
+3. Enable the **Gmail API** in your Google Cloud project.
+
+The extension requests only the `https://www.googleapis.com/auth/gmail.readonly` scope. If the API is unavailable or the user declines auth, it falls back to DOM-based thread extraction automatically.
+
 ---
 
 ## ☁️ Deployment
