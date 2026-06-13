@@ -1,5 +1,6 @@
 import { BaseAdapter } from './BaseAdapter';
 import { ComposeMode, ProviderName, SendEmailPayload, ThreadData, ThreadMessage } from './types';
+import { fetchGmailThreadData, getGmailAuthToken, getThreadIdFromUrl } from '../services/gmailApiService';
 
 const GMAIL_SELECTORS = {
   composeRoot: '.M9',
@@ -50,10 +51,11 @@ export class GmailAdapter extends BaseAdapter {
       .map((p) => p.trim())
       .filter(Boolean);
 
-    const currentDraft = composeRoot.querySelector<HTMLElement>(GMAIL_SELECTORS.editable)?.innerText?.trim() ?? '';
+    const editableEl = composeRoot.querySelector<HTMLElement>(GMAIL_SELECTORS.editable);
+    const currentDraft = (editableEl?.innerText || editableEl?.textContent || '').trim();
 
     const quotedMessages: ThreadMessage[] = Array.from(composeRoot.querySelectorAll<HTMLElement>(GMAIL_SELECTORS.quoteBlocks))
-      .map((el) => ({ body: el.innerText.trim() }))
+      .map((el) => ({ body: (el.innerText ?? el.textContent ?? '').trim() }))
       .filter((m) => m.body.length > 0);
 
     const messages: ThreadMessage[] = [
@@ -66,6 +68,25 @@ export class GmailAdapter extends BaseAdapter {
       participants,
       messages,
     };
+  }
+
+  /**
+   * Fetches the full thread via the Gmail REST API (threads.get) using an
+   * OAuth2 token obtained through Google Identity Services. Falls back to
+   * DOM-based extraction if no thread ID is found in the URL or if the API
+   * call fails.
+   */
+  async getThreadAsync(): Promise<ThreadData> {
+    try {
+      const threadId = getThreadIdFromUrl();
+      if (threadId) {
+        const token = await getGmailAuthToken();
+        return await fetchGmailThreadData(threadId, token);
+      }
+    } catch {
+      // API unavailable or auth declined — fall back to DOM extraction.
+    }
+    return this.getThread();
   }
 
   insertIntoComposer(html: string): void {

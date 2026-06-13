@@ -3,7 +3,16 @@
   "name": "AI Email Assistant for Gmail",
   "version": "1.0.0",
   "description": "Craft perfect emails directly in Gmail using AI.",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "identity"],
+  "host_permissions": [
+    "https://www.googleapis.com/gmail/v1/*"
+  ],
+  "oauth2": {
+    "client_id": "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/gmail.readonly"
+    ]
+  },
   "action": {
     "default_popup": "index.html"
   },

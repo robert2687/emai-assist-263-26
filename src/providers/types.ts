@@ -23,6 +23,13 @@ export interface ProviderAdapter {
   getProviderName(): ProviderName;
   getComposeMode(): ComposeMode;
   getThread(): ThreadData;
+  /**
+   * Optional async thread fetch that uses a provider's native API when
+   * available (e.g. Gmail API via OAuth2). Falls back to DOM extraction
+   * via getThread() if the provider does not implement this method or if
+   * the API call fails.
+   */
+  getThreadAsync?(): Promise<ThreadData>;
   insertIntoComposer(html: string): void;
   sendEmail(payload?: SendEmailPayload): Promise<void>;
 
