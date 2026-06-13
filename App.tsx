@@ -153,9 +153,6 @@ const App: React.FC = () => {
       (resolvedProvider === 'perplexity' && !hasPerplexityKey) ||
       (resolvedProvider === 'openrouter' && !hasOpenrouterKey)
     ) {
-    const hasGeminiKey = !!(process.env.GEMINI_API_KEY || process.env.API_KEY);
-    const hasPerplexityKey = !!process.env.PERPLEXITY_API_KEY;
-    if ((resolvedProvider === 'gemini' && !hasGeminiKey) || (resolvedProvider === 'perplexity' && !hasPerplexityKey)) {
       setIsSettingsModalOpen(true);
     }
 
@@ -290,11 +287,11 @@ const App: React.FC = () => {
     try {
       let result: EmailDraft[];
       if (apiProvider === 'perplexity') {
-        result = await generateEmailsWithPerplexity(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), perplexityApiKey, signature, includeSignature);
+        result = await generateEmailsWithPerplexity(userInput, enrichedContext, writingStyleSample, emailMode, Array.from(selectedTones), perplexityApiKey, signature, includeSignature);
       } else if (apiProvider === 'openrouter') {
-        result = await generateEmailsWithGPT(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), openrouterApiKey, signature, includeSignature);
+        result = await generateEmailsWithGPT(userInput, enrichedContext, writingStyleSample, emailMode, Array.from(selectedTones), openrouterApiKey, signature, includeSignature);
       } else {
-        result = await generateEmails(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), apiKey, signature, includeSignature);
+        result = await generateEmails(userInput, enrichedContext, writingStyleSample, emailMode, Array.from(selectedTones), apiKey, signature, includeSignature);
       }
       setGeneratedEmails(result);
     } catch (generationError: unknown) {
@@ -415,10 +412,6 @@ const App: React.FC = () => {
                 onClick={() => saveSettings(apiKey, perplexityApiKey, openrouterApiKey, apiProvider)} 
                 disabled={!isCurrentApiKeyValid()}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              <button
-                onClick={() => saveSettings(apiKey, perplexityApiKey, apiProvider)}
-                disabled={apiProvider === 'gemini' ? !apiKey.trim() : !perplexityApiKey.trim()}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Save Settings
               </button>
