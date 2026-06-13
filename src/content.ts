@@ -128,7 +128,9 @@ class UniversalComposerOverlay {
           break;
         }
         case 'REQUEST_THREAD_CONTEXT': {
-          const thread = this.adapter.getThread();
+          const thread = this.adapter.getThreadAsync
+            ? await this.adapter.getThreadAsync()
+            : this.adapter.getThread();
           event.source?.postMessage({
             type: 'THREAD_CONTEXT_RESPONSE',
             provider: this.adapter.getProviderName(),
@@ -138,7 +140,9 @@ class UniversalComposerOverlay {
           break;
         }
         case 'RUN_CONTEXT_ENGINE': {
-          const thread = this.adapter.getThread();
+          const thread = this.adapter.getThreadAsync
+            ? await this.adapter.getThreadAsync()
+            : this.adapter.getThread();
           const analysis = analyzeThreadContext(thread);
           event.source?.postMessage({
             type: 'CONTEXT_ENGINE_RESPONSE',

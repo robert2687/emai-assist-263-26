@@ -29,7 +29,9 @@ export default defineConfig(({ mode }) => {
       },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        'process.env.ZOHO_CLIENT_ID': JSON.stringify(env.ZOHO_CLIENT_ID ?? ''),
+        'process.env.ZOHO_REDIRECT_URI': JSON.stringify(env.ZOHO_REDIRECT_URI ?? ''),
       },
       resolve: {
         alias: {
