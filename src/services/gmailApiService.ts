@@ -186,7 +186,7 @@ export function requestGmailThread(threadId: string): Promise<GmailApiThread> {
         }
 
         if (!response?.thread) {
-          reject(new Error(response?.error ?? "No thread data returned from background service."));
+          reject(new Error(response?.error ?? "Background service returned empty response without error."));
           return;
         }
 
@@ -205,8 +205,9 @@ export async function fetchGmailThread(
   token: string,
 ): Promise<GmailApiThread> {
   const url = `${GMAIL_API_BASE}/threads/${encodeURIComponent(threadId)}?format=full`;
+  const authScheme = "Bearer";
   const response = await fetch(url, {
-    headers: { Authorization: 'Bearer ' + token },
+    headers: { Authorization: `${authScheme} ${token}` },
   });
 
   if (!response.ok) {
