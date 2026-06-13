@@ -94,8 +94,10 @@ function toggleSidebar(toolbar: Element) {
     if (sidebar) sidebar.style.display = 'none';
   });
 
-  // Listen for messages from the iframe
+  // Listen for messages from the iframe — restrict to this extension's origin only
+  const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
   window.addEventListener('message', (event) => {
+    if (event.origin !== extensionOrigin) return;
     if (event.data.type === 'INSERT_EMAIL') {
       insertTextIntoGmail(event.data.text, toolbar);
     }
@@ -110,7 +112,15 @@ function insertTextIntoGmail(text: string, toolbar: Element) {
 
   const editable = composeWindow.querySelector('.Am.Al.editable');
   if (editable) {
-    editable.innerHTML = text.replace(/\n/g, '<br>');
+    // Use safe DOM insertion to avoid HTML injection
+    editable.textContent = '';
+    const lines = text.split('\n');
+    lines.forEach((line, i) => {
+      editable.appendChild(document.createTextNode(line));
+      if (i < lines.length - 1) {
+        editable.appendChild(document.createElement('br'));
+      }
+    });
     // Trigger input event to make sure Gmail registers the change
     editable.dispatchEvent(new Event('input', { bubbles: true }));
   }

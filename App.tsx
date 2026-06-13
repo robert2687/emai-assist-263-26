@@ -97,7 +97,7 @@ const App: React.FC = () => {
   };
 
   const handleInsertToGmail = useCallback((text: string) => {
-    window.parent.postMessage({ type: 'INSERT_EMAIL', text }, '*');
+    window.parent.postMessage({ type: 'INSERT_EMAIL', text }, 'https://mail.google.com');
   }, []);
 
   const handleToneToggle = useCallback((tone: Tone) => {
