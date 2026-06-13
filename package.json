@@ -11,6 +11,7 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.13.0",
     "@google/genai": "^1.29.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -19,6 +20,7 @@
     "@cloudflare/vite-plugin": "^1.30.2",
     "@tailwindcss/vite": "^4.2.2",
     "@types/node": "^22.14.0",
+    "@types/office-js": "^1.0.592",
     "@vitejs/plugin-react": "^5.0.0",
     "tailwindcss": "^4.2.2",
     "typescript": "~5.8.2",

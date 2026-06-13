@@ -1,6 +1,6 @@
 export type ComposeMode = 'reply' | 'forward' | 'new';
 
-export type ProviderName = 'gmail' | 'zoho' | 'outlook';
+export type ProviderName = 'gmail' | 'zoho' | 'outlook' | 'outlook-officejs';
 
 export interface ThreadMessage {
   from?: string;
