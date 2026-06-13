@@ -155,6 +155,8 @@ const App: React.FC = () => {
       }
     }
 
+    const storedKey = localStorage.getItem('gemini_api_key');
+    const storedPerplexityKey = localStorage.getItem('perplexity_api_key');
     const resolvedProvider = storedProvider || 'gemini';
     const hasGeminiKey = !!(storedKey || process.env.GEMINI_API_KEY || process.env.API_KEY);
     const hasPerplexityKey = !!(storedPerplexityKey || process.env.PERPLEXITY_API_KEY);
