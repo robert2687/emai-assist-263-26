@@ -244,11 +244,9 @@ const App: React.FC = () => {
 
   const handleGenerateSubject = useCallback(() => {
     const suggestions = analysis?.subjectSuggestions || [];
-    const text = suggestions.length
-      ? `Subject suggestions:\n- ${suggestions.join('\n- ')}`
-      : `Subject suggestion: ${threadData?.subject || 'Follow-up'}`;
-    handleInsertIntoComposer(text);
-  }, [analysis?.subjectSuggestions, handleInsertIntoComposer, threadData?.subject]);
+    const subject = suggestions[0] || threadData?.subject || 'Follow-up';
+    postToComposer({ type: 'SET_SUBJECT', text: subject });
+  }, [analysis?.subjectSuggestions, postToComposer, threadData?.subject]);
 
   const handleInsertTemplate = useCallback((templateKey: string) => {
     const templates: Record<string, string> = {
@@ -261,19 +259,14 @@ const App: React.FC = () => {
   }, [handleInsertIntoComposer]);
 
   const handleScheduleSend = useCallback(() => {
-    handleSendEmail(`Scheduled send requested for: ${scheduleAt || 'TBD'}`, false);
-  }, [handleSendEmail, scheduleAt]);
+    const title = threadData?.subject || 'Email Follow-up';
+    postToComposer({ type: 'OPEN_CALENDAR', title, startDateTime: scheduleAt || undefined });
+  }, [postToComposer, scheduleAt, threadData?.subject]);
 
   const handleAddToCalendar = useCallback(() => {
     const title = threadData?.subject || 'Email Follow-up';
-    const details = [
-      `Calendar item: ${title}`,
-      analysis?.deadlines?.[0] ? `Target date: ${analysis.deadlines[0]}` : '',
-      analysis?.tasks?.[0] ? `Primary task: ${analysis.tasks[0]}` : '',
-    ].filter(Boolean).join('\n');
-
-    handleInsertIntoComposer(details || `Calendar item: ${title}`);
-  }, [analysis?.deadlines, analysis?.tasks, handleInsertIntoComposer, threadData?.subject]);
+    postToComposer({ type: 'OPEN_CALENDAR', title });
+  }, [postToComposer, threadData?.subject]);
 
   const refreshContext = useCallback(() => {
     postToComposer({ type: 'REQUEST_THREAD_CONTEXT' });

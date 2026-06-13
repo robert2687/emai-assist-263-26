@@ -52,10 +52,9 @@ export class OutlookAdapter extends BaseAdapter {
       .map((p) => p.trim())
       .filter(Boolean);
 
-    const editableEl = composeRoot.querySelector<HTMLElement>(OUTLOOK_SELECTORS.editable);
-    const currentDraft = (editableEl?.innerText || editableEl?.textContent || '').trim();
+    const currentDraft = composeRoot.querySelector<HTMLElement>(OUTLOOK_SELECTORS.editable)?.innerText?.trim() ?? '';
     const quotedMessages: ThreadMessage[] = Array.from(composeRoot.querySelectorAll<HTMLElement>(OUTLOOK_SELECTORS.quoteBlocks))
-      .map((el) => ({ body: (el.innerText ?? el.textContent ?? '').trim() }))
+      .map((el) => ({ body: el.innerText.trim() }))
       .filter((msg) => msg.body.length > 0);
 
     return {
@@ -77,6 +76,29 @@ export class OutlookAdapter extends BaseAdapter {
 
     editable.innerHTML = this.sanitizeInsertedHtml(html);
     editable.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  setSubject(text: string): void {
+    const composeRoot = this.requireActiveComposeRoot();
+    const subjectInput = composeRoot.querySelector<HTMLInputElement>(OUTLOOK_SELECTORS.subject);
+    if (!subjectInput) return;
+    subjectInput.value = text;
+    subjectInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  openCalendar(title = 'Email Follow-up', startDateTime?: string): void {
+    const url = new URL('https://outlook.office.com/calendar/0/deeplink/compose');
+    url.searchParams.set('path', '/calendar/action/compose');
+    url.searchParams.set('subject', title);
+    if (startDateTime) {
+      const startIso = `${startDateTime}:00`;
+      const endDate = new Date(`${startDateTime}:00`);
+      endDate.setHours(endDate.getHours() + 1);
+      const endIso = endDate.toISOString().slice(0, 19);
+      url.searchParams.set('startdt', startIso);
+      url.searchParams.set('enddt', endIso);
+    }
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
   }
 
   async sendEmail(payload?: SendEmailPayload): Promise<void> {

@@ -10,6 +10,8 @@ export abstract class BaseAdapter implements ProviderAdapter {
   abstract getComposeMode(): ComposeMode;
   abstract getThread(): ThreadData;
   abstract insertIntoComposer(html: string): void;
+  abstract setSubject(text: string): void;
+  abstract openCalendar(title?: string, startDateTime?: string): void;
   abstract sendEmail(payload?: SendEmailPayload): Promise<void>;
 
   setActiveComposeRoot(composeRoot: HTMLElement): void {

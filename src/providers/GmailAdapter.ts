@@ -51,11 +51,10 @@ export class GmailAdapter extends BaseAdapter {
       .map((p) => p.trim())
       .filter(Boolean);
 
-    const editableEl = composeRoot.querySelector<HTMLElement>(GMAIL_SELECTORS.editable);
-    const currentDraft = (editableEl?.innerText || editableEl?.textContent || '').trim();
+    const currentDraft = composeRoot.querySelector<HTMLElement>(GMAIL_SELECTORS.editable)?.innerText?.trim() ?? '';
 
     const quotedMessages: ThreadMessage[] = Array.from(composeRoot.querySelectorAll<HTMLElement>(GMAIL_SELECTORS.quoteBlocks))
-      .map((el) => ({ body: (el.innerText ?? el.textContent ?? '').trim() }))
+      .map((el) => ({ body: el.innerText.trim() }))
       .filter((m) => m.body.length > 0);
 
     const messages: ThreadMessage[] = [
@@ -98,6 +97,24 @@ export class GmailAdapter extends BaseAdapter {
 
     editable.innerHTML = this.sanitizeInsertedHtml(html);
     editable.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  setSubject(text: string): void {
+    const composeRoot = this.requireActiveComposeRoot();
+    const subjectInput = composeRoot.querySelector<HTMLInputElement>(GMAIL_SELECTORS.subject);
+    if (!subjectInput) return;
+    subjectInput.value = text;
+    subjectInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  openCalendar(title = 'Email Follow-up', startDateTime?: string): void {
+    const url = new URL('https://calendar.google.com/calendar/u/0/r/eventedit');
+    url.searchParams.set('text', title);
+    if (startDateTime) {
+      const compact = startDateTime.replace(/[-:T]/g, '').split(/[+Z]/)[0] + '00';
+      url.searchParams.set('dates', `${compact}/${compact}`);
+    }
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
   }
 
   async sendEmail(payload?: SendEmailPayload): Promise<void> {
