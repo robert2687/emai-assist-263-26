@@ -63,6 +63,9 @@ const splitSentences = (text: string): string[] =>
 
 const dedupe = (items: string[]): string[] => [...new Set(items.map((item) => item.trim()).filter(Boolean))];
 
+const toTitleCase = (text: string): string =>
+  text.replace(/\b\w/g, (character) => character.toUpperCase());
+
 export const detectLanguage = (text: string): SupportedLanguage => {
   const normalized = normalizeText(text).toLowerCase();
   if (!normalized) {
@@ -182,7 +185,7 @@ const buildSubjectSuggestions = (
 
   return dedupe([
     trimmedSubject,
-    `${classification === 'general correspondence' ? 'Follow-up' : classification.replace(/\b\w/g, (char) => char.toUpperCase())} update${deadlineSuffix}`,
+    `${classification === 'general correspondence' ? 'Follow-up' : toTitleCase(classification)} update${deadlineSuffix}`,
     `${fallbackTopic}${deadlineSuffix}`,
   ]).slice(0, 3);
 };
@@ -211,7 +214,7 @@ const buildSmartReplies = (
 
 export const analyzeThreadContext = (threadContext: ThreadContext): ContextAnalysis => {
   const combinedText = normalizeText(
-    [threadContext.subject, threadContext.lastMessage, threadContext.threadText].filter(Boolean).join('\n\n'),
+    [threadContext.subject, threadContext.threadText].filter(Boolean).join('\n\n'),
   );
   const tasks = extractTasks(combinedText);
   const deadlines = extractDeadlines(combinedText);

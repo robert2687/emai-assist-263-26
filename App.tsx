@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EmailDraft, EmailMode, Tone, ApiProvider, OverlayContextPayload, ProviderId } from './types';
 import { generateEmails } from './services/geminiService';
 import { generateEmailsWithPerplexity } from './services/perplexityService';
@@ -89,6 +89,7 @@ const App: React.FC = () => {
   const [overlayContext, setOverlayContext] = useState<OverlayContextPayload | null>(null);
   const [actionStatus, setActionStatus] = useState<string>('');
   const [providerHint, setProviderHint] = useState<ProviderId>('fallback');
+  const lastSyncedContextRef = useRef<string>('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -114,29 +115,19 @@ const App: React.FC = () => {
       setApiProvider(storedProvider);
     }
 
-    const storedKey = localStorage.getItem('gemini_api_key');
-    if (storedKey) {
-      setApiKey(storedKey);
-    } else {
-      const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
-      if (envKey) {
-        setApiKey(envKey);
-      }
+    const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+    if (envKey) {
+      setApiKey(envKey);
     }
 
-    const storedPerplexityKey = localStorage.getItem('perplexity_api_key');
-    if (storedPerplexityKey) {
-      setPerplexityApiKey(storedPerplexityKey);
-    } else {
-      const envPplxKey = process.env.PERPLEXITY_API_KEY || '';
-      if (envPplxKey) {
-        setPerplexityApiKey(envPplxKey);
-      }
+    const envPplxKey = process.env.PERPLEXITY_API_KEY || '';
+    if (envPplxKey) {
+      setPerplexityApiKey(envPplxKey);
     }
 
     const resolvedProvider = storedProvider || 'gemini';
-    const hasGeminiKey = !!(storedKey || process.env.GEMINI_API_KEY || process.env.API_KEY);
-    const hasPerplexityKey = !!(storedPerplexityKey || process.env.PERPLEXITY_API_KEY);
+    const hasGeminiKey = !!(process.env.GEMINI_API_KEY || process.env.API_KEY);
+    const hasPerplexityKey = !!process.env.PERPLEXITY_API_KEY;
     if ((resolvedProvider === 'gemini' && !hasGeminiKey) || (resolvedProvider === 'perplexity' && !hasPerplexityKey)) {
       setIsSettingsModalOpen(true);
     }
@@ -162,7 +153,16 @@ const App: React.FC = () => {
       if (data.type === 'INIT_CONTEXT' || data.type === 'CONTEXT_REFRESHED') {
         setOverlayContext(data.payload);
         setProviderHint(data.payload.provider);
-        setEmailContext((current) => current.trim() || data.payload.threadContext.threadText || '');
+        setEmailContext((current) => {
+          const incomingContext = data.payload.threadContext.threadText || '';
+          const canOverwrite = !current.trim() || current === lastSyncedContextRef.current;
+          if (canOverwrite) {
+            lastSyncedContextRef.current = incomingContext;
+            return incomingContext;
+          }
+
+          return current;
+        });
       }
     };
 
@@ -191,8 +191,6 @@ const App: React.FC = () => {
     setApiKey(geminiKey);
     setPerplexityApiKey(pplxKey);
     setApiProvider(provider);
-    localStorage.setItem('gemini_api_key', geminiKey);
-    localStorage.setItem('perplexity_api_key', pplxKey);
     localStorage.setItem('api_provider', provider);
     setIsSettingsModalOpen(false);
   };
@@ -329,7 +327,7 @@ const App: React.FC = () => {
             <div className="mb-6">
               <label className="mb-2 block text-sm font-semibold text-gray-300">Google Gemini API Key</label>
               <p className="mb-2 text-xs leading-relaxed text-gray-400">
-                Your key is stored locally in your browser and never sent to our servers.
+                Your key is used only for the current session unless you provide it through environment configuration.
               </p>
               <input
                 type="password"
@@ -343,7 +341,7 @@ const App: React.FC = () => {
             <div className="mb-6">
               <label className="mb-2 block text-sm font-semibold text-gray-300">Perplexity API Key</label>
               <p className="mb-2 text-xs leading-relaxed text-gray-400">
-                Your key is stored locally in your browser and never sent to our servers.
+                Your key is used only for the current session unless you provide it through environment configuration.
               </p>
               <input
                 type="password"
@@ -463,7 +461,9 @@ const App: React.FC = () => {
               <textarea
                 id="emailContext"
                 value={emailContext}
-                onChange={(event) => setEmailContext(event.target.value)}
+                onChange={(event) => {
+                  setEmailContext(event.target.value);
+                }}
                 placeholder="Paste or refresh the current thread context."
                 className="h-40 w-full resize-none rounded-lg border border-gray-600 bg-gray-700 p-3 transition duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               />
@@ -665,7 +665,7 @@ const App: React.FC = () => {
             {generatedEmails.length > 0 && (
               <div className="space-y-6">
                 {generatedEmails.map((email, index) => (
-                  <div key={`${email.subject}-${index}`} className="relative group">
+                  <div key={index} className="relative group">
                     <EmailCard draft={email} index={index} />
                     {isExtensionMode && (
                       <button

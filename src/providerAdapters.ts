@@ -119,7 +119,12 @@ const FALLBACK_CONFIG: ProviderDomConfig = {
   composeRootSelectors: ['[role="dialog"]', 'form', 'body'],
   toolbarSelectors: ['[role="toolbar"]', 'body'],
   bodySelectors: ['[contenteditable="true"]', 'textarea'],
-  subjectSelectors: ['input[name*="subject" i]', 'input[placeholder*="subject" i]'],
+  subjectSelectors: [
+    'input[name*="subject"]',
+    'input[name*="Subject"]',
+    'input[placeholder*="subject"]',
+    'input[placeholder*="Subject"]',
+  ],
   replyIndicators: ['reply'],
   forwardIndicators: ['forward'],
   participantsSelector: ['[email]', '[data-email-address]'],

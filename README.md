@@ -44,8 +44,8 @@
 - **Provider-aware extension mode** — embed the app inside Gmail, Outlook, and Zoho Mail compose flows
 - **Context Engine v2** — extract thread text, detect language/sentiment, identify tasks and deadlines, and classify grant-related conversations
 - **Email Intelligence Hub** — smart replies, subject suggestions, templates, summary insert, and calendar shortcuts from one shared overlay
-- **Multi-language support** — translates and drafts in EN / SK / CZ / DE
-- **API key stored locally** — your Gemini key never leaves your browser
+- **Multi-language support** — translates and drafts in EN / SK / ES / DE
+- **Session-only API key handling** — keys are kept in memory unless supplied through environment configuration
 
 ---
 
@@ -95,11 +95,11 @@ The app is served at `http://localhost:5173` by default.
 
 The Gemini API key can be provided in three ways (checked in order):
 
-1. **In-app Settings modal** — click the ⚙ Settings button; the key is stored in `localStorage`.
+1. **In-app Settings modal** — click the ⚙ Settings button; the key is used for the current browser session.
 2. **Environment variable** — set `GEMINI_API_KEY` (or `API_KEY`) in `.env.local`.
-3. **Prompt on first launch** — if no key is found, the Settings modal opens automatically.
+3. **Prompt on first launch** — if no key is available, the Settings modal opens automatically.
 
-> **Security note:** Your key is stored only in your browser's `localStorage` and is never sent to any server other than Google's Gemini API.
+> **Security note:** API keys entered in the UI stay in memory for the active session and are never persisted to browser storage by default.
 
 ### Email Signature
 
@@ -198,7 +198,7 @@ and error handling. Include test data and expected results.
 
 Performance & Security:
 - Prefer async/await; avoid blocking the main thread.
-- Never hardcode secrets; read keys from environment variables or localStorage only.
+- Never hardcode secrets; read keys from environment variables or session-only user input.
 - Validate and sanitise all user inputs before passing to the Gemini API.
 
 Deliverables:
