@@ -117,6 +117,6 @@ export const generateEmailsWithGPT = async (
     throw new Error("Invalid response format from OpenRouter API.");
   } catch (error) {
     console.error("Error calling OpenRouter API:", error);
-    throw new Error("Failed to generate emails from the OpenRouter API.");
+    throw new Error(`Failed to generate emails from the OpenRouter API: ${error instanceof Error ? error.message : String(error)}`);
   }
 };

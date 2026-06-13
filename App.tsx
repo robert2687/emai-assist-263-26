@@ -103,6 +103,12 @@ const App: React.FC = () => {
     localStorage.setItem('include_signature', String(newVal));
   };
 
+  const isCurrentApiKeyValid = (): boolean => {
+    if (apiProvider === 'gemini') return apiKey.trim().length > 0;
+    if (apiProvider === 'perplexity') return perplexityApiKey.trim().length > 0;
+    return openrouterApiKey.trim().length > 0;
+  };
+
   const saveSettings = (geminiKey: string, pplxKey: string, orKey: string, provider: ApiProvider) => {
     setApiKey(geminiKey);
     setPerplexityApiKey(pplxKey);
@@ -271,7 +277,7 @@ const App: React.FC = () => {
               </button>
               <button 
                 onClick={() => saveSettings(apiKey, perplexityApiKey, openrouterApiKey, apiProvider)} 
-                disabled={apiProvider === 'gemini' ? !apiKey.trim() : apiProvider === 'perplexity' ? !perplexityApiKey.trim() : !openrouterApiKey.trim()}
+                disabled={!isCurrentApiKeyValid()}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Save Settings
