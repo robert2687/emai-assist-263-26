@@ -7,6 +7,9 @@ declare const chrome: {
       callback: (token: string | undefined) => void,
     ): void;
   };
+  runtime: {
+    lastError?: { message?: string };
+  };
 };
 
 const GMAIL_API_BASE = "https://www.googleapis.com/gmail/v1/users/me";
@@ -130,7 +133,8 @@ export function getGmailAuthToken(): Promise<string> {
       if (token) {
         resolve(token);
       } else {
-        reject(new Error("Failed to acquire Gmail auth token."));
+        const reason = chrome.runtime.lastError?.message ?? 'unknown reason';
+        reject(new Error(`Failed to acquire Gmail auth token: ${reason}`));
       }
     });
   });
