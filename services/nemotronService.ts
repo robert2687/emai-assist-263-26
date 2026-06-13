@@ -40,7 +40,7 @@ EXTENDED CAPABILITIES & BEHAVIOR:
   } else if (emailMode === 'Concise') {
     basePrompt += "\nMODE: Concise. Keep the email brief, direct, and action-oriented while preserving clarity and professionalism.";
   } else {
-    basePrompt += "\nMODE: Grant Ready. Optimise for proposal, budget, compliance, or partner communication workflows. Highlight commitments, deadlines, and next actions with precise wording.";
+    basePrompt += "\nMODE: Grant Ready. Optimize for proposal, budget, compliance, or partner communication workflows. Highlight commitments, deadlines, and next actions with precise wording.";
   }
 
   if (selectedTones.length > 0) {
