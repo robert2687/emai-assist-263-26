@@ -21,7 +21,14 @@ import App from '../App';
 import { MsalAuthService } from './services/msalAuthService';
 import { GraphApiService } from './services/graphApiService';
 import { OutlookOfficeJsAdapter } from './providers/OutlookOfficeJsAdapter';
-import { analyzeThreadContext } from './context/contextEngineV2';
+import {
+  analyzeLanguage,
+  analyzeSentiment,
+  classifyGrantContext,
+  extractTasksAndDeadlines,
+  generateSummary,
+  suggestSubjects,
+} from './context/contextEngineV2';
 
 // These env vars must be set at build time via `VITE_MSAL_CLIENT_ID` and
 // `VITE_MSAL_TENANT_ID` in the project's .env file.
@@ -43,7 +50,34 @@ type OverlayMessage =
   | { type: 'INSERT_EMAIL'; text: string }
   | { type: 'SEND_EMAIL'; payload?: { html?: string; sendImmediately?: boolean } }
   | { type: 'REQUEST_THREAD_CONTEXT' }
-  | { type: 'RUN_CONTEXT_ENGINE' };
+  | { type: 'RUN_CONTEXT_ENGINE' }
+  | { type: 'SET_SUBJECT'; text: string }
+  | { type: 'OPEN_CALENDAR'; title?: string; startDateTime?: string };
+
+const runContextEngine = (thread: ReturnType<OutlookOfficeJsAdapter['getThread']>) => {
+  const language = analyzeLanguage(thread);
+  const sentiment = analyzeSentiment(thread);
+  const { tasks, deadlines } = extractTasksAndDeadlines(thread);
+  const summary = generateSummary(thread);
+  const subjectSuggestions = suggestSubjects(thread);
+  const grantClassification = classifyGrantContext(thread);
+  const nextSteps = [
+    ...(tasks[0] ? [`Complete: ${tasks[0]}`] : []),
+    ...(tasks[1] ? [`Coordinate: ${tasks[1]}`] : []),
+    ...(deadlines[0] ? [`Track deadline: ${deadlines[0]}`] : []),
+  ];
+
+  return {
+    summary,
+    language,
+    sentiment,
+    tasks,
+    deadlines,
+    nextSteps: nextSteps.length > 0 ? nextSteps : ['Confirm owner and due date for the next action.'],
+    subjectSuggestions,
+    grantClassification,
+  };
+};
 
 /** Installs the message bridge between App's postMessage calls and the adapter. */
 function installMessageBridge(adapter: OutlookOfficeJsAdapter): void {
@@ -78,7 +112,7 @@ function installMessageBridge(adapter: OutlookOfficeJsAdapter): void {
         case 'RUN_CONTEXT_ENGINE': {
           await adapter.loadThreadContext();
           const thread = adapter.getThread();
-          const analysis = analyzeThreadContext(thread);
+          const analysis = runContextEngine(thread);
           reply({
             type: 'CONTEXT_ENGINE_RESPONSE',
             provider: adapter.getProviderName(),
@@ -86,6 +120,14 @@ function installMessageBridge(adapter: OutlookOfficeJsAdapter): void {
             thread,
             analysis,
           });
+          break;
+        }
+        case 'SET_SUBJECT': {
+          adapter.setSubject(event.data.text);
+          break;
+        }
+        case 'OPEN_CALENDAR': {
+          adapter.openCalendar(event.data.title, event.data.startDateTime);
           break;
         }
         default:

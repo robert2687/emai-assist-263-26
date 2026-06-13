@@ -1,5 +1,12 @@
 
-import { analyzeThreadContext } from './context/contextEngineV2';
+import {
+  analyzeLanguage,
+  analyzeSentiment,
+  classifyGrantContext,
+  extractTasksAndDeadlines,
+  generateSummary,
+  suggestSubjects,
+} from './context/contextEngineV2';
 import { createProviderAdapter } from './providers/createProviderAdapter';
 import { ProviderAdapter } from './providers/types';
 
@@ -32,6 +39,60 @@ class UniversalComposerOverlay {
 
   mountForProvider(): void {
     this.injectAssistantButtons();
+  }
+
+  private async getActiveThread() {
+    return this.adapter.getThreadAsync
+      ? this.adapter.getThreadAsync()
+      : this.adapter.getThread();
+  }
+
+  private runContextEngine(thread: ReturnType<ProviderAdapter['getThread']>) {
+    const language = analyzeLanguage(thread);
+    const sentiment = analyzeSentiment(thread);
+    const { tasks, deadlines } = extractTasksAndDeadlines(thread);
+    const summary = generateSummary(thread);
+    const subjectSuggestions = suggestSubjects(thread);
+    const grantClassification = classifyGrantContext(thread);
+    const nextSteps = [
+      ...(tasks[0] ? [`Complete: ${tasks[0]}`] : []),
+      ...(tasks[1] ? [`Coordinate: ${tasks[1]}`] : []),
+      ...(deadlines[0] ? [`Track deadline: ${deadlines[0]}`] : []),
+    ];
+
+    return {
+      summary,
+      language,
+      sentiment,
+      tasks,
+      deadlines,
+      nextSteps: nextSteps.length > 0 ? nextSteps : ['Confirm owner and due date for the next action.'],
+      subjectSuggestions,
+      grantClassification,
+    };
+  }
+
+  private async pushInitialContextToSidebar(): Promise<void> {
+    if (!this.iframe?.contentWindow) return;
+    const thread = await this.getActiveThread();
+    const provider = this.adapter.getProviderName();
+    const composeMode = this.adapter.getComposeMode();
+    const analysis = this.runContextEngine(thread);
+
+    this.iframe.contentWindow.postMessage({
+      type: 'THREAD_CONTEXT_RESPONSE',
+      provider,
+      composeMode,
+      thread,
+    }, '*');
+
+    this.iframe.contentWindow.postMessage({
+      type: 'CONTEXT_ENGINE_RESPONSE',
+      provider,
+      composeMode,
+      thread,
+      analysis,
+    }, '*');
   }
 
   private injectAssistantButtons(): void {
@@ -99,6 +160,9 @@ class UniversalComposerOverlay {
       this.iframe.style.width = '100%';
       this.iframe.style.height = 'calc(100% - 54px)';
       this.iframe.style.border = 'none';
+      this.iframe.addEventListener('load', () => {
+        void this.pushInitialContextToSidebar();
+      });
 
       this.sidebar.appendChild(header);
       this.sidebar.appendChild(this.iframe);
@@ -112,6 +176,7 @@ class UniversalComposerOverlay {
     }
 
     this.sidebar.style.display = 'block';
+    void this.pushInitialContextToSidebar();
   }
 
   private readonly handleWindowMessage = async (event: MessageEvent<OverlayMessage>) => {
@@ -128,9 +193,7 @@ class UniversalComposerOverlay {
           break;
         }
         case 'REQUEST_THREAD_CONTEXT': {
-          const thread = this.adapter.getThreadAsync
-            ? await this.adapter.getThreadAsync()
-            : this.adapter.getThread();
+          const thread = await this.getActiveThread();
           event.source?.postMessage({
             type: 'THREAD_CONTEXT_RESPONSE',
             provider: this.adapter.getProviderName(),
@@ -140,10 +203,8 @@ class UniversalComposerOverlay {
           break;
         }
         case 'RUN_CONTEXT_ENGINE': {
-          const thread = this.adapter.getThreadAsync
-            ? await this.adapter.getThreadAsync()
-            : this.adapter.getThread();
-          const analysis = analyzeThreadContext(thread);
+          const thread = await this.getActiveThread();
+          const analysis = this.runContextEngine(thread);
           event.source?.postMessage({
             type: 'CONTEXT_ENGINE_RESPONSE',
             provider: this.adapter.getProviderName(),

@@ -61,6 +61,28 @@ export class OutlookOfficeJsAdapter extends BaseAdapter {
     });
   }
 
+  setSubject(text: string): void {
+    const item = Office.context.mailbox.item as Office.MessageCompose | null;
+    item?.subject?.setAsync?.(text);
+  }
+
+  openCalendar(title = 'Email Follow-up', startDateTime?: string): void {
+    const url = new URL('https://outlook.office.com/calendar/0/deeplink/compose');
+    url.searchParams.set('path', '/calendar/action/compose');
+    url.searchParams.set('subject', title);
+
+    if (startDateTime) {
+      const startIso = `${startDateTime}:00`;
+      const endDate = new Date(startIso);
+      endDate.setHours(endDate.getHours() + 1);
+      const endIso = endDate.toISOString().slice(0, 19);
+      url.searchParams.set('startdt', startIso);
+      url.searchParams.set('enddt', endIso);
+    }
+
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  }
+
   async sendEmail(payload?: SendEmailPayload): Promise<void> {
     if (payload?.html) {
       await new Promise<void>((resolve, reject) => {
