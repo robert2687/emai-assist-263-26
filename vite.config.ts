@@ -19,10 +19,13 @@ export default defineConfig(({ mode }) => {
           input: {
             main: path.resolve(__dirname, 'index.html'),
             content: path.resolve(__dirname, 'src/content.ts'),
+            background: path.resolve(__dirname, 'src/background.ts'),
           },
           output: {
             entryFileNames: (chunkInfo) => {
-              return chunkInfo.name === 'content' ? '[name].js' : 'assets/[name]-[hash].js';
+              return ['content', 'background'].includes(chunkInfo.name)
+                ? '[name].js'
+                : 'assets/[name]-[hash].js';
             },
           },
         },
