@@ -1,21 +1,35 @@
-export type EmailMode = 'Formal' | 'Friendly' | 'Concise' | 'Grant Ready';
 
-export type ApiProvider = 'gemini' | 'perplexity' | 'openrouter' | 'nemotron';
+export type EmailMode = 'Formal' | 'Friendly';
 
 export type Tone = 'Confident' | 'Empathetic' | 'Assertive' | 'Humorous' | 'Concise' | 'Detailed';
 
-export type ProviderId = 'gmail' | 'outlook' | 'zoho' | 'fallback';
+export type ComposeMode = 'reply' | 'forward' | 'new';
 
-export type ComposeMode = 'new' | 'reply' | 'forward' | 'unknown';
+export interface ThreadMessage {
+  from?: string;
+  body: string;
+  timestamp?: string;
+}
 
-export type SupportedLanguage = 'en' | 'sk' | 'de' | 'es' | 'unknown';
+export interface ThreadData {
+  subject: string;
+  participants: string[];
+  messages: ThreadMessage[];
+}
 
-export type GrantClassification =
-  | 'proposal'
-  | 'budget'
-  | 'compliance'
-  | 'partner communication'
-  | 'general correspondence';
+export type Sentiment = 'positive' | 'negative' | 'neutral' | 'urgent';
+export type GrantClassification = 'grant_application' | 'grant_reporting' | 'grant_budget' | 'non_grant';
+
+export interface ContextEngineOutput {
+  summary: string;
+  language: string;
+  sentiment: Sentiment;
+  tasks: string[];
+  deadlines: string[];
+  nextSteps: string[];
+  subjectSuggestions: string[];
+  grantClassification: GrantClassification;
+}
 
 export interface EmailDraft {
   subject: string;
@@ -30,48 +44,4 @@ export interface EmailDraft {
 
 export interface GeminiResponse {
   emails: EmailDraft[];
-}
-
-export interface ThreadParticipant {
-  name: string;
-  email?: string;
-}
-
-export interface ThreadContext {
-  provider: ProviderId;
-  composeMode: ComposeMode;
-  subject: string;
-  participants: ThreadParticipant[];
-  lastMessage: string;
-  threadText: string;
-}
-
-export interface ProviderCapabilities {
-  smartReply: boolean;
-  templates: boolean;
-  signature: boolean;
-  summaryInsert: boolean;
-  subjectSuggestions: boolean;
-  scheduleSend: boolean;
-  calendarAdd: boolean;
-}
-
-export interface ContextAnalysis {
-  language: SupportedLanguage;
-  sentiment: string;
-  tasks: string[];
-  deadlines: string[];
-  commitments: string[];
-  summary: string;
-  nextSteps: string[];
-  subjectSuggestions: string[];
-  smartReplies: string[];
-  classification: GrantClassification;
-}
-
-export interface OverlayContextPayload {
-  provider: ProviderId;
-  capabilities: ProviderCapabilities;
-  threadContext: ThreadContext;
-  analysis: ContextAnalysis;
 }

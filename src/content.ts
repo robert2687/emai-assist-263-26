@@ -1,190 +1,172 @@
-import { analyzeThreadContext } from '../services/contextEngine';
-import { OverlayContextPayload } from '../types';
-import { ComposeSurface, getMailProviderAdapter, MailProviderAdapter } from './providerAdapters';
 
-const TRIGGER_ATTRIBUTE = 'data-ai-email-assistant-trigger';
+import { analyzeThreadContext } from './context/contextEngineV2';
+import { createProviderAdapter } from './providers/createProviderAdapter';
+import { ProviderAdapter } from './providers/types';
+
+const AI_BUTTON_ATTR = 'data-ai-email-assistant';
 const SIDEBAR_ID = 'ai-email-assistant-sidebar';
-const extensionOrigin = new URL(chrome.runtime.getURL('')).origin;
 
-let activeAdapter: MailProviderAdapter = getMailProviderAdapter(window.location.hostname);
-let activeSurface: ComposeSurface | null = null;
-let sidebar: HTMLDivElement | null = null;
-let iframe: HTMLIFrameElement | null = null;
-
-type OverlayMessage =
-  | { type: 'READY_FOR_CONTEXT' | 'REFRESH_CONTEXT' | 'OPEN_CALENDAR' }
-  | { type: 'INSERT_EMAIL' | 'INSERT_SUBJECT'; text: string };
-
-const buildOverlayPayload = (): OverlayContextPayload => {
-  const fallbackSurface = activeAdapter.findComposeSurfaces()[0] ?? { root: document.body, toolbar: document.body };
-  const surface = activeSurface ?? fallbackSurface;
-  const threadContext = activeAdapter.extractThreadContext(surface.root);
-
-  return {
-    provider: activeAdapter.id,
-    capabilities: activeAdapter.capabilities,
-    threadContext,
-    analysis: analyzeThreadContext(threadContext),
+declare const chrome: {
+  runtime: {
+    getURL(path: string): string;
   };
 };
 
-const postContextToOverlay = (type: 'INIT_CONTEXT' | 'CONTEXT_REFRESHED'): void => {
-  if (!iframe?.contentWindow) {
-    return;
+type OverlayMessage =
+  | { type: 'INSERT_EMAIL'; text: string }
+  | { type: 'SEND_EMAIL'; payload?: { html?: string; sendImmediately?: boolean } }
+  | { type: 'REQUEST_THREAD_CONTEXT' }
+  | { type: 'RUN_CONTEXT_ENGINE' };
+
+class UniversalComposerOverlay {
+  private readonly adapter: ProviderAdapter;
+  private sidebar: HTMLDivElement | null = null;
+  private iframe: HTMLIFrameElement | null = null;
+
+  constructor(adapter: ProviderAdapter) {
+    this.adapter = adapter;
+    window.addEventListener('message', this.handleWindowMessage);
   }
 
-  iframe.contentWindow.postMessage({ type, payload: buildOverlayPayload() }, extensionOrigin);
-};
-
-const ensureSidebar = (): void => {
-  if (sidebar && iframe) {
-    sidebar.style.display = 'block';
-    postContextToOverlay('CONTEXT_REFRESHED');
-    return;
+  mountForProvider(): void {
+    this.injectAssistantButtons();
   }
 
-  sidebar = document.createElement('div');
-  sidebar.id = SIDEBAR_ID;
-  sidebar.style.position = 'fixed';
-  sidebar.style.right = '0';
-  sidebar.style.top = '0';
-  sidebar.style.width = '420px';
-  sidebar.style.height = '100%';
-  sidebar.style.backgroundColor = '#111827';
-  sidebar.style.boxShadow = '-2px 0 10px rgba(0,0,0,0.45)';
-  sidebar.style.zIndex = '9999';
-  sidebar.style.borderLeft = '1px solid #374151';
-  sidebar.style.display = 'block';
+  private injectAssistantButtons(): void {
+    this.adapter.findComposeRoots().forEach((composeRoot, index) => {
+      const toolbar = this.adapter.getToolbarForCompose(composeRoot);
+      if (!toolbar) return;
 
-  const header = document.createElement('div');
-  header.style.padding = '16px';
-  header.style.display = 'flex';
-  header.style.justifyContent = 'space-between';
-  header.style.alignItems = 'center';
-  header.style.borderBottom = '1px solid #374151';
-  const titleGroup = document.createElement('div');
-  const title = document.createElement('h2');
-  title.textContent = 'Email Intelligence Hub';
-  title.style.color = '#60a5fa';
-  title.style.margin = '0';
-  title.style.fontSize = '18px';
+      const existing = toolbar.querySelector<HTMLElement>(`[${AI_BUTTON_ATTR}="true"]`);
+      if (existing) return;
 
-  const subtitle = document.createElement('p');
-  subtitle.textContent = `${activeAdapter.label} context engine`;
-  subtitle.style.color = '#9ca3af';
-  subtitle.style.margin = '4px 0 0';
-  subtitle.style.fontSize = '12px';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute(AI_BUTTON_ATTR, 'true');
+      button.dataset.composeIndex = String(index);
+      button.title = 'AI Email Assistant';
+      button.textContent = 'AI Write';
+      button.style.marginLeft = '8px';
+      button.style.padding = '0 12px';
+      button.style.height = '32px';
+      button.style.border = 'none';
+      button.style.borderRadius = '6px';
+      button.style.cursor = 'pointer';
+      button.style.background = '#2563eb';
+      button.style.color = '#fff';
+      button.style.fontWeight = '700';
 
-  const closeButton = document.createElement('button');
-  closeButton.id = 'close-ai-sidebar';
-  closeButton.setAttribute('aria-label', 'Close assistant sidebar');
-  closeButton.textContent = '×';
-  closeButton.style.background = 'none';
-  closeButton.style.border = 'none';
-  closeButton.style.color = '#9ca3af';
-  closeButton.style.cursor = 'pointer';
-  closeButton.style.fontSize = '20px';
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.adapter.setActiveComposeRoot(composeRoot);
+        this.showSidebar();
+      });
 
-  titleGroup.appendChild(title);
-  titleGroup.appendChild(subtitle);
-  header.appendChild(titleGroup);
-  header.appendChild(closeButton);
-  sidebar.appendChild(header);
+      toolbar.appendChild(button);
+    });
+  }
 
-  iframe = document.createElement('iframe');
-  iframe.src = `${chrome.runtime.getURL('index.html')}?extension=true&provider=${activeAdapter.id}`;
-  iframe.style.width = '100%';
-  iframe.style.height = 'calc(100% - 74px)';
-  iframe.style.border = 'none';
-  iframe.addEventListener('load', () => postContextToOverlay('INIT_CONTEXT'));
-  sidebar.appendChild(iframe);
+  private showSidebar(): void {
+    if (!this.sidebar) {
+      this.sidebar = document.createElement('div');
+      this.sidebar.id = SIDEBAR_ID;
+      this.sidebar.style.position = 'fixed';
+      this.sidebar.style.right = '0';
+      this.sidebar.style.top = '0';
+      this.sidebar.style.width = '420px';
+      this.sidebar.style.height = '100%';
+      this.sidebar.style.backgroundColor = '#111827';
+      this.sidebar.style.boxShadow = '-2px 0 10px rgba(0,0,0,0.5)';
+      this.sidebar.style.zIndex = '9999';
+      this.sidebar.style.borderLeft = '1px solid #374151';
 
-  document.body.appendChild(sidebar);
+      const header = document.createElement('div');
+      header.style.padding = '14px 16px';
+      header.style.display = 'flex';
+      header.style.justifyContent = 'space-between';
+      header.style.alignItems = 'center';
+      header.style.borderBottom = '1px solid #374151';
+      header.innerHTML = `
+        <h2 style="color: #60a5fa; margin: 0; font-size: 18px;">AI Email Assistant (${this.adapter.getProviderName()})</h2>
+        <button id="close-ai-sidebar" style="background: none; border: none; color: #9ca3af; cursor: pointer; font-size: 20px;">&times;</button>
+      `;
 
-  header.querySelector('#close-ai-sidebar')?.addEventListener('click', () => {
-    if (sidebar) {
-      sidebar.style.display = 'none';
-    }
-  });
-};
+      this.iframe = document.createElement('iframe');
+      this.iframe.src = `${chrome.runtime.getURL('index.html')}?extension=true&provider=${encodeURIComponent(this.adapter.getProviderName())}`;
+      this.iframe.style.width = '100%';
+      this.iframe.style.height = 'calc(100% - 54px)';
+      this.iframe.style.border = 'none';
 
-const createTrigger = (surface: ComposeSurface): HTMLDivElement => {
-  const trigger = document.createElement('div');
-  trigger.setAttribute(TRIGGER_ATTRIBUTE, 'true');
-  trigger.className = 'wG J-Z-I';
-  trigger.style.display = 'inline-flex';
-  trigger.style.alignItems = 'center';
-  trigger.style.marginLeft = '8px';
-  trigger.style.cursor = 'pointer';
-  trigger.title = 'Open Email Intelligence Hub';
-  trigger.innerHTML = `
-    <div role="button" aria-label="Open AI email assistant" class="T-I J-J5-Ji aoO v7 T-I-atl L3" style="background-color: #2563eb; color: white; border-radius: 6px; padding: 0 12px; height: 36px; display: flex; align-items: center;">
-      <span style="font-weight: 700;">AI Hub</span>
-    </div>
-  `;
+      this.sidebar.appendChild(header);
+      this.sidebar.appendChild(this.iframe);
+      document.body.appendChild(this.sidebar);
 
-  trigger.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    activeSurface = surface;
-    ensureSidebar();
-    postContextToOverlay('CONTEXT_REFRESHED');
-  });
-
-  return trigger;
-};
-
-const injectButtons = (): void => {
-  activeAdapter = getMailProviderAdapter(window.location.hostname);
-
-  activeAdapter.findComposeSurfaces().forEach((surface) => {
-    if (surface.toolbar.querySelector(`[${TRIGGER_ATTRIBUTE}="true"]`)) {
-      return;
+      header.querySelector('#close-ai-sidebar')?.addEventListener('click', () => {
+        if (this.sidebar) {
+          this.sidebar.style.display = 'none';
+        }
+      });
     }
 
-    surface.toolbar.appendChild(createTrigger(surface));
+    this.sidebar.style.display = 'block';
+  }
+
+  private readonly handleWindowMessage = async (event: MessageEvent<OverlayMessage>) => {
+    if (!event?.data || typeof event.data !== 'object') return;
+
+    try {
+      switch (event.data.type) {
+        case 'INSERT_EMAIL': {
+          this.adapter.insertIntoComposer(event.data.text);
+          break;
+        }
+        case 'SEND_EMAIL': {
+          await this.adapter.sendEmail(event.data.payload);
+          break;
+        }
+        case 'REQUEST_THREAD_CONTEXT': {
+          const thread = this.adapter.getThread();
+          event.source?.postMessage({
+            type: 'THREAD_CONTEXT_RESPONSE',
+            provider: this.adapter.getProviderName(),
+            composeMode: this.adapter.getComposeMode(),
+            thread,
+          }, '*');
+          break;
+        }
+        case 'RUN_CONTEXT_ENGINE': {
+          const thread = this.adapter.getThread();
+          const analysis = analyzeThreadContext(thread);
+          event.source?.postMessage({
+            type: 'CONTEXT_ENGINE_RESPONSE',
+            provider: this.adapter.getProviderName(),
+            composeMode: this.adapter.getComposeMode(),
+            thread,
+            analysis,
+          }, '*');
+          break;
+        }
+        default:
+          break;
+      }
+    } catch (error) {
+      event.source?.postMessage({
+        type: 'AI_ASSISTANT_ERROR',
+        message: error instanceof Error ? error.message : 'Unknown overlay error.',
+      }, '*');
+    }
+  };
+}
+
+const adapter = createProviderAdapter();
+
+if (adapter) {
+  const overlay = new UniversalComposerOverlay(adapter);
+  const observer = new MutationObserver(() => {
+    overlay.mountForProvider();
   });
-};
 
-window.addEventListener('message', (event) => {
-  if (event.origin !== extensionOrigin) {
-    return;
-  }
-
-  const data = event.data as OverlayMessage | undefined;
-  if (!data?.type) {
-    return;
-  }
-
-  const fallbackSurface = activeAdapter.findComposeSurfaces()[0] ?? { root: document.body, toolbar: document.body };
-  const surface = activeSurface ?? fallbackSurface;
-
-  switch (data.type) {
-    case 'READY_FOR_CONTEXT':
-    case 'REFRESH_CONTEXT':
-      postContextToOverlay('CONTEXT_REFRESHED');
-      break;
-    case 'INSERT_EMAIL':
-      if (typeof data.text === 'string') {
-        activeAdapter.insertBodyText(surface.root, data.text);
-      }
-      break;
-    case 'INSERT_SUBJECT':
-      if (typeof data.text === 'string') {
-        activeAdapter.insertSubject(surface.root, data.text);
-      }
-      break;
-    case 'OPEN_CALENDAR':
-      activeAdapter.openCalendar();
-      break;
-    default:
-      break;
-  }
-});
-
-const observer = new MutationObserver(() => {
-  injectButtons();
-});
-
-observer.observe(document.body, { childList: true, subtree: true });
-injectButtons();
+  observer.observe(document.body, { childList: true, subtree: true });
+  overlay.mountForProvider();
+}
