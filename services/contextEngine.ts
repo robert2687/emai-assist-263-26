@@ -15,7 +15,7 @@ const COMMITMENT_PATTERN =
   /\b(?:i|we)\s+(?:will|can|plan to|commit to|intend to|promise to|expect to|deliver|share|prepare|review|send)\b/i;
 
 const LANGUAGE_RULES: Array<{ language: SupportedLanguage; pattern: RegExp }> = [
-  { language: 'sk', pattern: /\b(ďakujem|prosím|termín|rozpočet|grant|zmluva|partner|príloha|ďalší|stretnutie)\b|[áäčďéíĺľňóôŕšťúýž]/i },
+  { language: 'sk', pattern: /\b(ďakujem|prosím|termín|rozpočet|grant|zmluva|partner|príloha|ďalšie|stretnutie)\b|[áäčďéíĺľňóôŕšťúýž]/i },
   { language: 'de', pattern: /\b(danke|bitte|frist|haushalt|angebot|zusammenfassung|anhang|projekt|förderung)\b|[äöüß]/i },
   { language: 'es', pattern: /\b(gracias|por favor|plazo|presupuesto|propuesta|cumplimiento|adjunto|reunión)\b|[¿¡ñáéíóú]/i },
 ];
