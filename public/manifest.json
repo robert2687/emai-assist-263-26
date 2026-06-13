@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AI Email Assistant",
   "version": "1.0.0",
-  "description": "Craft provider-aware emails in Gmail, Outlook, and Zoho Mail using AI.",
+  "description": "Craft multi-provider emails in Gmail, Outlook, and Zoho Mail using AI.",
   "permissions": ["activeTab", "scripting", "storage"],
   "action": {
     "default_popup": "index.html"

@@ -91,6 +91,7 @@ const App: React.FC = () => {
   const [providerHint, setProviderHint] = useState<ProviderId>('fallback');
   const lastSyncedThreadTextRef = useRef<string>('');
   const hasManualThreadContextEditRef = useRef<boolean>(false);
+  const parentOriginRef = useRef<string>('*');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -99,7 +100,12 @@ const App: React.FC = () => {
 
     if (extensionMode) {
       setIsExtensionMode(true);
-      window.parent.postMessage({ type: 'READY_FOR_CONTEXT' }, '*');
+      try {
+        parentOriginRef.current = document.referrer ? new URL(document.referrer).origin : '*';
+      } catch {
+        parentOriginRef.current = '*';
+      }
+      window.parent.postMessage({ type: 'READY_FOR_CONTEXT' }, parentOriginRef.current);
     }
 
     if (
@@ -223,7 +229,7 @@ const App: React.FC = () => {
   }, []);
 
   const postComposerMessage = useCallback((type: string, text?: string) => {
-    window.parent.postMessage(text ? { type, text } : { type }, '*');
+    window.parent.postMessage(text ? { type, text } : { type }, parentOriginRef.current);
     setActionStatus(
       type === 'OPEN_CALENDAR'
         ? 'Opened the provider calendar in a new tab.'

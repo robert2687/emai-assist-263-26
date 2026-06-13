@@ -33,7 +33,7 @@ const postContextToOverlay = (type: 'INIT_CONTEXT' | 'CONTEXT_REFRESHED'): void 
     return;
   }
 
-  iframe.contentWindow.postMessage({ type, payload: buildOverlayPayload() }, '*');
+  iframe.contentWindow.postMessage({ type, payload: buildOverlayPayload() }, extensionOrigin);
 };
 
 const ensureSidebar = (): void => {
@@ -62,13 +62,33 @@ const ensureSidebar = (): void => {
   header.style.justifyContent = 'space-between';
   header.style.alignItems = 'center';
   header.style.borderBottom = '1px solid #374151';
-  header.innerHTML = `
-    <div>
-      <h2 style="color: #60a5fa; margin: 0; font-size: 18px;">Email Intelligence Hub</h2>
-      <p style="color: #9ca3af; margin: 4px 0 0; font-size: 12px;">${activeAdapter.label} context engine</p>
-    </div>
-    <button id="close-ai-sidebar" aria-label="Close assistant sidebar" style="background: none; border: none; color: #9ca3af; cursor: pointer; font-size: 20px;">&times;</button>
-  `;
+  const titleGroup = document.createElement('div');
+  const title = document.createElement('h2');
+  title.textContent = 'Email Intelligence Hub';
+  title.style.color = '#60a5fa';
+  title.style.margin = '0';
+  title.style.fontSize = '18px';
+
+  const subtitle = document.createElement('p');
+  subtitle.textContent = `${activeAdapter.label} context engine`;
+  subtitle.style.color = '#9ca3af';
+  subtitle.style.margin = '4px 0 0';
+  subtitle.style.fontSize = '12px';
+
+  const closeButton = document.createElement('button');
+  closeButton.id = 'close-ai-sidebar';
+  closeButton.setAttribute('aria-label', 'Close assistant sidebar');
+  closeButton.textContent = '×';
+  closeButton.style.background = 'none';
+  closeButton.style.border = 'none';
+  closeButton.style.color = '#9ca3af';
+  closeButton.style.cursor = 'pointer';
+  closeButton.style.fontSize = '20px';
+
+  titleGroup.appendChild(title);
+  titleGroup.appendChild(subtitle);
+  header.appendChild(titleGroup);
+  header.appendChild(closeButton);
   sidebar.appendChild(header);
 
   iframe = document.createElement('iframe');

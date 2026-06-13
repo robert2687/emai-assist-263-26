@@ -44,7 +44,7 @@
 - **Provider-aware extension mode** — embed the app inside Gmail, Outlook, and Zoho Mail compose flows
 - **Context Engine v2** — extract thread text, detect language/sentiment, identify tasks and deadlines, and classify grant-related conversations
 - **Email Intelligence Hub** — smart replies, subject suggestions, templates, summary insert, and calendar shortcuts from one shared overlay
-- **Multi-language support** — translates and drafts in EN / SK / ES / DE
+- **Multi-language support** — detects thread language and drafts in EN / SK / ES / DE
 - **Session-only API key handling** — keys are kept in memory unless supplied through environment configuration
 
 ---
