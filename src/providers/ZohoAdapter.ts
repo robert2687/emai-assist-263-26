@@ -169,17 +169,12 @@ export class ZohoAdapter extends BaseAdapter {
       .map((p) => p.trim())
       .filter(Boolean);
 
-    const currentDraft =
-      composeRoot.querySelector<HTMLElement>(ZOHO_SELECTORS.editable)?.innerText?.trim() ?? '';
+    const editableEl = composeRoot.querySelector<HTMLElement>(ZOHO_SELECTORS.editable);
+    const currentDraft = (editableEl?.innerText || editableEl?.textContent || '').trim();
 
     const quotedMessages: ThreadMessage[] = Array.from(
       composeRoot.querySelectorAll<HTMLElement>(ZOHO_SELECTORS.quoteBlocks),
     )
-      .map((el) => ({ body: el.innerText.trim() }))
-    const editableEl = composeRoot.querySelector<HTMLElement>(ZOHO_SELECTORS.editable);
-    const currentDraft = (editableEl?.innerText || editableEl?.textContent || '').trim();
-    const currentDraft = composeRoot.querySelector<HTMLElement>(ZOHO_SELECTORS.editable)?.innerText?.trim() ?? '';
-    const quotedMessages: ThreadMessage[] = Array.from(composeRoot.querySelectorAll<HTMLElement>(ZOHO_SELECTORS.quoteBlocks))
       .map((el) => ({ body: el.innerText.trim() }))
       .filter((msg) => msg.body.length > 0);
 
