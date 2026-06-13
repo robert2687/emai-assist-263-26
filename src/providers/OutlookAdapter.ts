@@ -52,10 +52,9 @@ export class OutlookAdapter extends BaseAdapter {
       .map((p) => p.trim())
       .filter(Boolean);
 
-    const editableEl = composeRoot.querySelector<HTMLElement>(OUTLOOK_SELECTORS.editable);
-    const currentDraft = (editableEl?.innerText || editableEl?.textContent || '').trim();
+    const currentDraft = composeRoot.querySelector<HTMLElement>(OUTLOOK_SELECTORS.editable)?.innerText?.trim() ?? '';
     const quotedMessages: ThreadMessage[] = Array.from(composeRoot.querySelectorAll<HTMLElement>(OUTLOOK_SELECTORS.quoteBlocks))
-      .map((el) => ({ body: (el.innerText ?? el.textContent ?? '').trim() }))
+      .map((el) => ({ body: el.innerText.trim() }))
       .filter((msg) => msg.body.length > 0);
 
     return {
