@@ -72,12 +72,17 @@ export class OutlookOfficeJsAdapter extends BaseAdapter {
     url.searchParams.set('subject', title);
 
     if (startDateTime) {
-      const startIso = `${startDateTime}:00`;
-      const endDate = new Date(startIso);
-      endDate.setHours(endDate.getHours() + 1);
-      const endIso = endDate.toISOString().slice(0, 19);
-      url.searchParams.set('startdt', startIso);
-      url.searchParams.set('enddt', endIso);
+      const startDate = new Date(startDateTime);
+      if (Number.isNaN(startDate.getTime())) {
+        console.warn('[OutlookOfficeJsAdapter] Invalid startDateTime passed to openCalendar:', startDateTime);
+        window.open(url.toString(), '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      const endDate = new Date(startDate);
+      endDate.setTime(startDate.getTime() + 60 * 60 * 1000);
+      url.searchParams.set('startdt', startDate.toISOString());
+      url.searchParams.set('enddt', endDate.toISOString());
     }
 
     window.open(url.toString(), '_blank', 'noopener,noreferrer');

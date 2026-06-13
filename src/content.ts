@@ -1,12 +1,5 @@
 
-import {
-  analyzeLanguage,
-  analyzeSentiment,
-  classifyGrantContext,
-  extractTasksAndDeadlines,
-  generateSummary,
-  suggestSubjects,
-} from './context/contextEngineV2';
+import { analyzeThreadContext } from './context/contextEngineV2';
 import { createProviderAdapter } from './providers/createProviderAdapter';
 import { ProviderAdapter } from './providers/types';
 
@@ -31,6 +24,7 @@ class UniversalComposerOverlay {
   private readonly adapter: ProviderAdapter;
   private sidebar: HTMLDivElement | null = null;
   private iframe: HTMLIFrameElement | null = null;
+  private iframeReady = false;
 
   constructor(adapter: ProviderAdapter) {
     this.adapter = adapter;
@@ -47,29 +41,13 @@ class UniversalComposerOverlay {
       : this.adapter.getThread();
   }
 
-  private runContextEngine(thread: ReturnType<ProviderAdapter['getThread']>) {
-    const language = analyzeLanguage(thread);
-    const sentiment = analyzeSentiment(thread);
-    const { tasks, deadlines } = extractTasksAndDeadlines(thread);
-    const summary = generateSummary(thread);
-    const subjectSuggestions = suggestSubjects(thread);
-    const grantClassification = classifyGrantContext(thread);
-    const nextSteps = [
-      ...(tasks[0] ? [`Complete: ${tasks[0]}`] : []),
-      ...(tasks[1] ? [`Coordinate: ${tasks[1]}`] : []),
-      ...(deadlines[0] ? [`Track deadline: ${deadlines[0]}`] : []),
-    ];
-
-    return {
-      summary,
-      language,
-      sentiment,
-      tasks,
-      deadlines,
-      nextSteps: nextSteps.length > 0 ? nextSteps : ['Confirm owner and due date for the next action.'],
-      subjectSuggestions,
-      grantClassification,
-    };
+  private getSidebarTargetOrigin(): string | null {
+    if (!this.iframe?.src) return null;
+    try {
+      return new URL(this.iframe.src).origin;
+    } catch {
+      return null;
+    }
   }
 
   private async pushInitialContextToSidebar(): Promise<void> {
@@ -77,14 +55,16 @@ class UniversalComposerOverlay {
     const thread = await this.getActiveThread();
     const provider = this.adapter.getProviderName();
     const composeMode = this.adapter.getComposeMode();
-    const analysis = this.runContextEngine(thread);
+    const analysis = analyzeThreadContext(thread);
+    const targetOrigin = this.getSidebarTargetOrigin();
+    if (!targetOrigin) return;
 
     this.iframe.contentWindow.postMessage({
       type: 'THREAD_CONTEXT_RESPONSE',
       provider,
       composeMode,
       thread,
-    }, '*');
+    }, targetOrigin);
 
     this.iframe.contentWindow.postMessage({
       type: 'CONTEXT_ENGINE_RESPONSE',
@@ -92,7 +72,7 @@ class UniversalComposerOverlay {
       composeMode,
       thread,
       analysis,
-    }, '*');
+    }, targetOrigin);
   }
 
   private injectAssistantButtons(): void {
@@ -161,6 +141,7 @@ class UniversalComposerOverlay {
       this.iframe.style.height = 'calc(100% - 54px)';
       this.iframe.style.border = 'none';
       this.iframe.addEventListener('load', () => {
+        this.iframeReady = true;
         void this.pushInitialContextToSidebar();
       });
 
@@ -176,7 +157,9 @@ class UniversalComposerOverlay {
     }
 
     this.sidebar.style.display = 'block';
-    void this.pushInitialContextToSidebar();
+    if (this.iframeReady) {
+      void this.pushInitialContextToSidebar();
+    }
   }
 
   private readonly handleWindowMessage = async (event: MessageEvent<OverlayMessage>) => {
@@ -204,7 +187,7 @@ class UniversalComposerOverlay {
         }
         case 'RUN_CONTEXT_ENGINE': {
           const thread = await this.getActiveThread();
-          const analysis = this.runContextEngine(thread);
+          const analysis = analyzeThreadContext(thread);
           event.source?.postMessage({
             type: 'CONTEXT_ENGINE_RESPONSE',
             provider: this.adapter.getProviderName(),
