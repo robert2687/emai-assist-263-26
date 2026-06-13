@@ -83,7 +83,7 @@ Extension SDK instead of DOM scraping:
 
 | Concern | SDK API used |
 |---------|-------------|
-| Composer detection | `ZOHO.ZMailClient.ON('ON_COMPOSE_OPEN' \| 'ON_REPLY_OPEN' \| 'ON_FORWARD_OPEN', handler)` |
+| Composer detection | `ZOHO.ZMailClient.ON('ON_COMPOSE_OPEN' | 'ON_REPLY_OPEN' | 'ON_FORWARD_OPEN', handler)` |
 | Compose close | `ZOHO.ZMailClient.ON('ON_COMPOSE_CLOSE', handler)` |
 | Insert body | `ZOHO.ZMailClient.set('mail.compose.body', { body, composeId })` |
 | Send email | `ZOHO.ZMailClient.invoke('ZMailCompose.send', { composeId })` |

@@ -1,5 +1,6 @@
 const TOKEN_STORAGE_KEY = 'zoho_oauth_token';
 const CODE_VERIFIER_STORAGE_KEY = 'zoho_pkce_verifier';
+const EXPIRY_BUFFER_MS = 5 * 60 * 1000; // refresh 5 minutes before expiry
 
 const ZOHO_AUTH_URL = 'https://accounts.zoho.com/oauth/v2/auth';
 const ZOHO_TOKEN_URL = 'https://accounts.zoho.com/oauth/v2/token';
@@ -9,6 +10,17 @@ export interface ZohoTokenData {
   access_token: string;
   refresh_token: string;
   expires_at: number;
+  token_type: string;
+}
+
+/**
+ * Persistent data kept in localStorage.
+ * The access_token is intentionally excluded to avoid storing short-lived
+ * bearer credentials in clear text; it is held in memory only.
+ */
+interface PersistedTokenData {
+  refresh_token: string;
+  access_token_expires_at: number;
   token_type: string;
 }
 
@@ -42,6 +54,11 @@ const generateCodeChallenge = async (verifier: string): Promise<string> => {
 /**
  * Manages Zoho OAuth 2.0 tokens using the PKCE extension.
  *
+ * Security note: the short-lived access token is held in memory only and never
+ * written to localStorage.  Only the refresh token and token metadata are
+ * persisted, as they are necessary for silent re-authentication across page
+ * loads.
+ *
  * Usage:
  *   1. Call `initiateOAuthFlow()` to redirect the user to the Zoho consent screen.
  *   2. On callback, call `handleOAuthCallback(code)` with the code from the URL.
@@ -50,6 +67,11 @@ const generateCodeChallenge = async (verifier: string): Promise<string> => {
 export class ZohoOAuthService {
   private readonly clientId: string;
   private readonly redirectUri: string;
+
+  /** In-memory access token; not persisted to avoid clear-text storage. */
+  private inMemoryAccessToken: string | null = null;
+  /** Expiry timestamp (ms) for the in-memory access token. */
+  private inMemoryExpiresAt = 0;
 
   constructor(clientId: string, redirectUri: string) {
     this.clientId = clientId;
@@ -120,14 +142,16 @@ export class ZohoOAuthService {
       token_type: string;
     };
 
+    const expiresAt = Date.now() + json.expires_in * 1000;
     const tokenData: ZohoTokenData = {
       access_token: json.access_token,
       refresh_token: json.refresh_token,
-      expires_at: Date.now() + json.expires_in * 1000,
+      expires_at: expiresAt,
       token_type: json.token_type,
     };
 
-    this.storeToken(tokenData);
+    this.cacheAccessToken(json.access_token, expiresAt);
+    this.persistRefreshData(json.refresh_token, expiresAt, json.token_type);
     return tokenData;
   }
 
@@ -157,58 +181,101 @@ export class ZohoOAuthService {
       token_type: string;
     };
 
-    const existing = this.getStoredToken();
+    const expiresAt = Date.now() + json.expires_in * 1000;
+    const storedRefreshToken = this.getPersistedData()?.refresh_token ?? refreshToken;
+
     const tokenData: ZohoTokenData = {
       access_token: json.access_token,
-      refresh_token: existing?.refresh_token ?? refreshToken,
-      expires_at: Date.now() + json.expires_in * 1000,
+      refresh_token: storedRefreshToken,
+      expires_at: expiresAt,
       token_type: json.token_type,
     };
 
-    this.storeToken(tokenData);
+    this.cacheAccessToken(json.access_token, expiresAt);
+    this.persistRefreshData(storedRefreshToken, expiresAt, json.token_type);
     return tokenData;
   }
 
   /**
-   * Returns a valid access token, transparently refreshing it if it is within
-   * five minutes of expiry.  Returns `null` if no token is stored or if the
-   * refresh attempt fails.
+   * Returns a valid access token, transparently refreshing it if the in-memory
+   * token is within five minutes of expiry.  Returns `null` if no credentials
+   * are available or if the refresh attempt fails.
    */
   async getValidAccessToken(): Promise<string | null> {
-    const token = this.getStoredToken();
-    if (!token) return null;
-
-    const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
-    if (Date.now() + EXPIRY_BUFFER_MS < token.expires_at) {
-      return token.access_token;
+    if (
+      this.inMemoryAccessToken &&
+      Date.now() + EXPIRY_BUFFER_MS < this.inMemoryExpiresAt
+    ) {
+      return this.inMemoryAccessToken;
     }
 
+    const persisted = this.getPersistedData();
+    if (!persisted) return null;
+
     try {
-      const refreshed = await this.refreshAccessToken(token.refresh_token);
+      const refreshed = await this.refreshAccessToken(persisted.refresh_token);
       return refreshed.access_token;
     } catch {
       return null;
     }
   }
 
+  /**
+   * Returns the full token data by combining the in-memory access token with the
+   * persisted refresh data.  Returns `null` if the user has not authenticated.
+   */
   getStoredToken(): ZohoTokenData | null {
-    try {
-      const raw = localStorage.getItem(TOKEN_STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as ZohoTokenData) : null;
-    } catch {
-      return null;
-    }
-  }
+    const persisted = this.getPersistedData();
+    if (!persisted) return null;
 
-  private storeToken(token: ZohoTokenData): void {
-    localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(token));
+    return {
+      access_token: this.inMemoryAccessToken ?? '',
+      refresh_token: persisted.refresh_token,
+      expires_at: persisted.access_token_expires_at,
+      token_type: persisted.token_type,
+    };
   }
 
   clearToken(): void {
+    this.inMemoryAccessToken = null;
+    this.inMemoryExpiresAt = 0;
     localStorage.removeItem(TOKEN_STORAGE_KEY);
   }
 
   isAuthenticated(): boolean {
-    return this.getStoredToken() !== null;
+    return this.getPersistedData() !== null;
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
+
+  private cacheAccessToken(accessToken: string, expiresAt: number): void {
+    this.inMemoryAccessToken = accessToken;
+    this.inMemoryExpiresAt = expiresAt;
+  }
+
+  /**
+   * Persists only the refresh token and token metadata.
+   * The access token is intentionally excluded to avoid clear-text storage.
+   */
+  private persistRefreshData(
+    refreshToken: string,
+    accessTokenExpiresAt: number,
+    tokenType: string,
+  ): void {
+    const data: PersistedTokenData = {
+      refresh_token: refreshToken,
+      access_token_expires_at: accessTokenExpiresAt,
+      token_type: tokenType,
+    };
+    localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(data));
+  }
+
+  private getPersistedData(): PersistedTokenData | null {
+    try {
+      const raw = localStorage.getItem(TOKEN_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as PersistedTokenData) : null;
+    } catch {
+      return null;
+    }
   }
 }

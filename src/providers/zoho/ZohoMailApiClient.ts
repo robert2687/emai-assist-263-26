@@ -99,6 +99,7 @@ export class ZohoMailApiClient {
     const messages: ThreadMessage[] = apiMessages.map((msg) => ({
       from: msg.fromAddress,
       body: msg.content ?? msg.summary ?? '',
+      // Zoho API returns receivedTime as a Unix timestamp in milliseconds (string)
       timestamp: msg.receivedTime
         ? new Date(Number(msg.receivedTime)).toISOString()
         : undefined,
