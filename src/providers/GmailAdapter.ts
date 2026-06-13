@@ -79,6 +79,24 @@ export class GmailAdapter extends BaseAdapter {
     editable.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
+  setSubject(text: string): void {
+    const composeRoot = this.requireActiveComposeRoot();
+    const subjectInput = composeRoot.querySelector<HTMLInputElement>(GMAIL_SELECTORS.subject);
+    if (!subjectInput) return;
+    subjectInput.value = text;
+    subjectInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  openCalendar(title = 'Email Follow-up', startDateTime?: string): void {
+    const url = new URL('https://calendar.google.com/calendar/u/0/r/eventedit');
+    url.searchParams.set('text', title);
+    if (startDateTime) {
+      const compact = startDateTime.replace(/[-:]/g, '') + '00';
+      url.searchParams.set('dates', `${compact}/${compact}`);
+    }
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  }
+
   async sendEmail(payload?: SendEmailPayload): Promise<void> {
     if (payload?.html) {
       this.insertIntoComposer(payload.html);

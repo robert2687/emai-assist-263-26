@@ -78,6 +78,25 @@ export class OutlookAdapter extends BaseAdapter {
     editable.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
+  setSubject(text: string): void {
+    const composeRoot = this.requireActiveComposeRoot();
+    const subjectInput = composeRoot.querySelector<HTMLInputElement>(OUTLOOK_SELECTORS.subject);
+    if (!subjectInput) return;
+    subjectInput.value = text;
+    subjectInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  openCalendar(title = 'Email Follow-up', startDateTime?: string): void {
+    const url = new URL('https://outlook.office.com/calendar/0/deeplink/compose');
+    url.searchParams.set('path', '/calendar/action/compose');
+    url.searchParams.set('subject', title);
+    if (startDateTime) {
+      url.searchParams.set('startdt', `${startDateTime}:00`);
+      url.searchParams.set('enddt', `${startDateTime}:00`);
+    }
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  }
+
   async sendEmail(payload?: SendEmailPayload): Promise<void> {
     if (payload?.html) {
       this.insertIntoComposer(payload.html);

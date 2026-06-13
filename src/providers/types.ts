@@ -24,6 +24,8 @@ export interface ProviderAdapter {
   getComposeMode(): ComposeMode;
   getThread(): ThreadData;
   insertIntoComposer(html: string): void;
+  setSubject(text: string): void;
+  openCalendar(title?: string, startDateTime?: string): void;
   sendEmail(payload?: SendEmailPayload): Promise<void>;
 
   /**
