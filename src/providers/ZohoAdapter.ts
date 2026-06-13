@@ -82,8 +82,8 @@ export class ZohoAdapter extends BaseAdapter {
 
   openCalendar(title = 'Email Follow-up', startDateTime?: string): void {
     const url = new URL('https://calendar.zoho.com');
+    url.searchParams.set('title', title);
     if (startDateTime) {
-      url.searchParams.set('title', title);
       url.searchParams.set('start', startDateTime);
     }
     window.open(url.toString(), '_blank', 'noopener,noreferrer');

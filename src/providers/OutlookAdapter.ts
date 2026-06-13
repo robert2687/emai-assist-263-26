@@ -91,8 +91,12 @@ export class OutlookAdapter extends BaseAdapter {
     url.searchParams.set('path', '/calendar/action/compose');
     url.searchParams.set('subject', title);
     if (startDateTime) {
-      url.searchParams.set('startdt', `${startDateTime}:00`);
-      url.searchParams.set('enddt', `${startDateTime}:00`);
+      const startIso = `${startDateTime}:00`;
+      const endDate = new Date(`${startDateTime}:00`);
+      endDate.setHours(endDate.getHours() + 1);
+      const endIso = endDate.toISOString().slice(0, 19);
+      url.searchParams.set('startdt', startIso);
+      url.searchParams.set('enddt', endIso);
     }
     window.open(url.toString(), '_blank', 'noopener,noreferrer');
   }

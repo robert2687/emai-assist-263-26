@@ -91,7 +91,7 @@ export class GmailAdapter extends BaseAdapter {
     const url = new URL('https://calendar.google.com/calendar/u/0/r/eventedit');
     url.searchParams.set('text', title);
     if (startDateTime) {
-      const compact = startDateTime.replace(/[-:]/g, '') + '00';
+      const compact = startDateTime.replace(/[-:T]/g, '').split(/[+Z]/)[0] + '00';
       url.searchParams.set('dates', `${compact}/${compact}`);
     }
     window.open(url.toString(), '_blank', 'noopener,noreferrer');
