@@ -1,6 +1,6 @@
 export type EmailMode = 'Formal' | 'Friendly' | 'Concise' | 'Grant Ready';
 
-export type ApiProvider = 'gemini' | 'perplexity';
+export type ApiProvider = 'gemini' | 'perplexity' | 'openrouter';
 
 export type Tone = 'Confident' | 'Empathetic' | 'Assertive' | 'Humorous' | 'Concise' | 'Detailed';
 

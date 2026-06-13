@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EmailDraft, EmailMode, Tone, ApiProvider, OverlayContextPayload, ProviderId } from './types';
 import { generateEmails } from './services/geminiService';
 import { generateEmailsWithPerplexity } from './services/perplexityService';
+import { generateEmailsWithGPT } from './services/gptService';
 import { analyzeThreadContext } from './services/contextEngine';
 import { TONES } from './constants';
 import ToneSelector from './components/ToneSelector';
@@ -82,6 +83,7 @@ const App: React.FC = () => {
   const [isExtensionMode, setIsExtensionMode] = useState<boolean>(false);
   const [apiKey, setApiKey] = useState<string>('');
   const [perplexityApiKey, setPerplexityApiKey] = useState<string>('');
+  const [openrouterApiKey, setOpenrouterApiKey] = useState<string>('');
   const [apiProvider, setApiProvider] = useState<ApiProvider>('gemini');
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [signature, setSignature] = useState<string>('');
@@ -118,7 +120,7 @@ const App: React.FC = () => {
     }
 
     const storedProvider = localStorage.getItem('api_provider') as ApiProvider | null;
-    if (storedProvider === 'perplexity' || storedProvider === 'gemini') {
+    if (storedProvider === 'perplexity' || storedProvider === 'gemini' || storedProvider === 'openrouter') {
       setApiProvider(storedProvider);
     }
 
@@ -132,7 +134,25 @@ const App: React.FC = () => {
       setPerplexityApiKey(envPplxKey);
     }
 
+    const storedOpenrouterKey = localStorage.getItem('openrouter_api_key');
+    if (storedOpenrouterKey) {
+      setOpenrouterApiKey(storedOpenrouterKey);
+    } else {
+      const envOrKey = process.env.OPENROUTER_API_KEY || '';
+      if (envOrKey) {
+        setOpenrouterApiKey(envOrKey);
+      }
+    }
+
     const resolvedProvider = storedProvider || 'gemini';
+    const hasGeminiKey = !!(storedKey || process.env.GEMINI_API_KEY || process.env.API_KEY);
+    const hasPerplexityKey = !!(storedPerplexityKey || process.env.PERPLEXITY_API_KEY);
+    const hasOpenrouterKey = !!(storedOpenrouterKey || process.env.OPENROUTER_API_KEY);
+    if (
+      (resolvedProvider === 'gemini' && !hasGeminiKey) ||
+      (resolvedProvider === 'perplexity' && !hasPerplexityKey) ||
+      (resolvedProvider === 'openrouter' && !hasOpenrouterKey)
+    ) {
     const hasGeminiKey = !!(process.env.GEMINI_API_KEY || process.env.API_KEY);
     const hasPerplexityKey = !!process.env.PERPLEXITY_API_KEY;
     if ((resolvedProvider === 'gemini' && !hasGeminiKey) || (resolvedProvider === 'perplexity' && !hasPerplexityKey)) {
@@ -195,10 +215,20 @@ const App: React.FC = () => {
   const capabilities = overlayContext?.capabilities ?? DEFAULT_CAPABILITIES;
   const activeProvider = overlayContext?.provider ?? providerHint;
 
-  const saveSettings = (geminiKey: string, pplxKey: string, provider: ApiProvider) => {
+  const isCurrentApiKeyValid = (): boolean => {
+    if (apiProvider === 'gemini') return apiKey.trim().length > 0;
+    if (apiProvider === 'perplexity') return perplexityApiKey.trim().length > 0;
+    return openrouterApiKey.trim().length > 0;
+  };
+
+  const saveSettings = (geminiKey: string, pplxKey: string, orKey: string, provider: ApiProvider) => {
     setApiKey(geminiKey);
     setPerplexityApiKey(pplxKey);
+    setOpenrouterApiKey(orKey);
     setApiProvider(provider);
+    localStorage.setItem('gemini_api_key', geminiKey);
+    localStorage.setItem('perplexity_api_key', pplxKey);
+    localStorage.setItem('openrouter_api_key', orKey);
     localStorage.setItem('api_provider', provider);
     setIsSettingsModalOpen(false);
   };
@@ -258,28 +288,14 @@ const App: React.FC = () => {
     );
 
     try {
-      const result = apiProvider === 'perplexity'
-        ? await generateEmailsWithPerplexity(
-          userInput,
-          enrichedContext,
-          writingStyleSample,
-          emailMode,
-          Array.from(selectedTones),
-          perplexityApiKey,
-          signature,
-          includeSignature,
-        )
-        : await generateEmails(
-          userInput,
-          enrichedContext,
-          writingStyleSample,
-          emailMode,
-          Array.from(selectedTones),
-          apiKey,
-          signature,
-          includeSignature,
-        );
-
+      let result: EmailDraft[];
+      if (apiProvider === 'perplexity') {
+        result = await generateEmailsWithPerplexity(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), perplexityApiKey, signature, includeSignature);
+      } else if (apiProvider === 'openrouter') {
+        result = await generateEmailsWithGPT(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), openrouterApiKey, signature, includeSignature);
+      } else {
+        result = await generateEmails(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), apiKey, signature, includeSignature);
+      }
       setGeneratedEmails(result);
     } catch (generationError: unknown) {
       if (generationError instanceof Error && generationError.message === 'API Key is required') {
@@ -289,20 +305,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [
-    apiKey,
-    apiProvider,
-    contextAnalysis,
-    emailContext,
-    emailMode,
-    includeSignature,
-    overlayContext,
-    perplexityApiKey,
-    selectedTones,
-    signature,
-    userInput,
-    writingStyleSample,
-  ]);
+  }, [userInput, emailContext, writingStyleSample, emailMode, selectedTones, apiKey, perplexityApiKey, openrouterApiKey, apiProvider, signature, includeSignature]);
 
   return (
     <div className={`min-h-screen bg-gray-900 text-gray-200 font-sans ${isExtensionMode ? 'p-2' : ''}`}>
@@ -319,15 +322,21 @@ const App: React.FC = () => {
               <div className="flex rounded-lg bg-gray-700 p-1">
                 <button
                   onClick={() => setApiProvider('gemini')}
-                  className={`w-1/2 rounded-md py-2 text-sm font-medium transition-colors duration-300 ${apiProvider === 'gemini' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                  className={`w-1/3 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'gemini' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                 >
                   Google Gemini
                 </button>
                 <button
                   onClick={() => setApiProvider('perplexity')}
-                  className={`w-1/2 rounded-md py-2 text-sm font-medium transition-colors duration-300 ${apiProvider === 'perplexity' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                  className={`w-1/3 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'perplexity' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
                 >
                   Perplexity
+                </button>
+                <button
+                  onClick={() => setApiProvider('openrouter')}
+                  className={`w-1/3 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'openrouter' ? 'bg-green-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                >
+                  GPT (OpenRouter)
                 </button>
               </div>
             </div>
@@ -361,7 +370,21 @@ const App: React.FC = () => {
             </div>
 
             <div className="mb-6">
-              <div className="mb-2 flex items-center justify-between">
+              <label className="block text-sm font-semibold text-gray-300 mb-2">OpenRouter API Key (GPT)</label>
+              <p className="text-gray-400 text-xs mb-2 leading-relaxed">
+                Your key is stored locally in your browser and never sent to our servers. Get a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">openrouter.ai</a>.
+              </p>
+              <input
+                type="password"
+                value={openrouterApiKey}
+                onChange={(e) => setOpenrouterApiKey(e.target.value)}
+                placeholder="sk-or-v1-..."
+                className="w-full p-3 bg-gray-900 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-green-500 focus:border-green-500 transition duration-200"
+              />
+            </div>
+
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-semibold text-gray-300">Email Signature</label>
                 <label className="flex cursor-pointer items-center">
                   <div className="relative">
@@ -388,6 +411,10 @@ const App: React.FC = () => {
               >
                 Cancel
               </button>
+              <button 
+                onClick={() => saveSettings(apiKey, perplexityApiKey, openrouterApiKey, apiProvider)} 
+                disabled={!isCurrentApiKeyValid()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               <button
                 onClick={() => saveSettings(apiKey, perplexityApiKey, apiProvider)}
                 disabled={apiProvider === 'gemini' ? !apiKey.trim() : !perplexityApiKey.trim()}
