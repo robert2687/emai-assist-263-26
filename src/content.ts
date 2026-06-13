@@ -11,6 +11,10 @@ let activeSurface: ComposeSurface | null = null;
 let sidebar: HTMLDivElement | null = null;
 let iframe: HTMLIFrameElement | null = null;
 
+type OverlayMessage =
+  | { type: 'READY_FOR_CONTEXT' | 'REFRESH_CONTEXT' | 'OPEN_CALENDAR' }
+  | { type: 'INSERT_EMAIL' | 'INSERT_SUBJECT'; text: string };
+
 const buildOverlayPayload = (): OverlayContextPayload => {
   const fallbackSurface = activeAdapter.findComposeSurfaces()[0] ?? { root: document.body, toolbar: document.body };
   const surface = activeSurface ?? fallbackSurface;
@@ -127,7 +131,7 @@ window.addEventListener('message', (event) => {
     return;
   }
 
-  const data = event.data as { type?: string; text?: string } | undefined;
+  const data = event.data as OverlayMessage | undefined;
   if (!data?.type) {
     return;
   }

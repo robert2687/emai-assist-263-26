@@ -6,7 +6,7 @@ import {
 } from '../types';
 
 const DEADLINE_PATTERN =
-  /\b(?:by|before|on|due|deadline|eod|cob|tomorrow|today|next week|next month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[^.!?\n]*/gi;
+  /\b(?:by|before|on|due|deadline|eod|cob|tomorrow|today|next week|next month|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[^.!?\n]{0,40}/gi;
 
 const TASK_PATTERN =
   /\b(?:please|kindly|need to|action item|todo|follow up|can you|could you|should|must|review|send|share|prepare|submit|confirm|schedule)\b/i;
@@ -64,7 +64,7 @@ const splitSentences = (text: string): string[] =>
 const dedupe = (items: string[]): string[] => [...new Set(items.map((item) => item.trim()).filter(Boolean))];
 
 const toTitleCase = (text: string): string =>
-  text.replace(/\b\w/g, (character) => character.toUpperCase());
+  text.replace(/\b\w/g, (firstChar) => firstChar.toUpperCase());
 
 export const detectLanguage = (text: string): SupportedLanguage => {
   const normalized = normalizeText(text).toLowerCase();

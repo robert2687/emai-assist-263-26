@@ -89,7 +89,8 @@ const App: React.FC = () => {
   const [overlayContext, setOverlayContext] = useState<OverlayContextPayload | null>(null);
   const [actionStatus, setActionStatus] = useState<string>('');
   const [providerHint, setProviderHint] = useState<ProviderId>('fallback');
-  const lastSyncedContextRef = useRef<string>('');
+  const lastSyncedThreadTextRef = useRef<string>('');
+  const hasManualThreadContextEditRef = useRef<boolean>(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -155,9 +156,10 @@ const App: React.FC = () => {
         setProviderHint(data.payload.provider);
         setEmailContext((current) => {
           const incomingContext = data.payload.threadContext.threadText || '';
-          const canOverwrite = !current.trim() || current === lastSyncedContextRef.current;
+          const canOverwrite = !hasManualThreadContextEditRef.current || !current.trim();
           if (canOverwrite) {
-            lastSyncedContextRef.current = incomingContext;
+            lastSyncedThreadTextRef.current = incomingContext;
+            hasManualThreadContextEditRef.current = false;
             return incomingContext;
           }
 
@@ -462,7 +464,9 @@ const App: React.FC = () => {
                 id="emailContext"
                 value={emailContext}
                 onChange={(event) => {
-                  setEmailContext(event.target.value);
+                  const nextValue = event.target.value;
+                  hasManualThreadContextEditRef.current = nextValue !== lastSyncedThreadTextRef.current;
+                  setEmailContext(nextValue);
                 }}
                 placeholder="Paste or refresh the current thread context."
                 className="h-40 w-full resize-none rounded-lg border border-gray-600 bg-gray-700 p-3 transition duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
@@ -543,7 +547,10 @@ const App: React.FC = () => {
                 </div>
                 {isExtensionMode && (
                   <button
-                    onClick={() => postComposerMessage('REFRESH_CONTEXT')}
+                    onClick={() => {
+                      hasManualThreadContextEditRef.current = false;
+                      postComposerMessage('REFRESH_CONTEXT');
+                    }}
                     className="rounded-lg border border-gray-600 px-3 py-2 text-sm text-gray-200 transition hover:border-blue-500 hover:text-white"
                   >
                     Refresh context
