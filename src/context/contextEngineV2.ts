@@ -108,14 +108,32 @@ const buildNextSteps = (tasks: string[], deadlines: string[]): string[] => {
   return steps.length > 0 ? steps : ['Confirm owner and due date for the next action.'];
 };
 
+export const analyzeLanguage = (thread: ThreadData): string => detectLanguage(collectCorpus(thread));
+
+export const analyzeSentiment = (thread: ThreadData): Sentiment => detectSentiment(collectCorpus(thread));
+
+export const extractTasksAndDeadlines = (thread: ThreadData): { tasks: string[]; deadlines: string[] } => ({
+  tasks: extractTasks(thread),
+  deadlines: extractDeadlines(thread),
+});
+
+export const generateSummary = (thread: ThreadData): string => summarize(thread);
+
+export const suggestSubjects = (thread: ThreadData): string[] => {
+  const sentiment = analyzeSentiment(thread);
+  const { tasks } = extractTasksAndDeadlines(thread);
+  return subjectSuggestions(thread, tasks, sentiment);
+};
+
+export const classifyGrantContext = (thread: ThreadData): GrantClassification => classifyGrant(thread);
+
 export const analyzeThreadContext = (thread: ThreadData): ContextEngineOutput => {
-  const summary = summarize(thread);
-  const language = detectLanguage(collectCorpus(thread));
-  const sentiment = detectSentiment(collectCorpus(thread));
-  const tasks = extractTasks(thread);
-  const deadlines = extractDeadlines(thread);
+  const summary = generateSummary(thread);
+  const language = analyzeLanguage(thread);
+  const sentiment = analyzeSentiment(thread);
+  const { tasks, deadlines } = extractTasksAndDeadlines(thread);
   const nextSteps = buildNextSteps(tasks, deadlines);
-  const grantClassification = classifyGrant(thread);
+  const grantClassification = classifyGrantContext(thread);
 
   return {
     summary,
@@ -124,7 +142,7 @@ export const analyzeThreadContext = (thread: ThreadData): ContextEngineOutput =>
     tasks,
     deadlines,
     nextSteps,
-    subjectSuggestions: subjectSuggestions(thread, tasks, sentiment),
+    subjectSuggestions: suggestSubjects(thread),
     grantClassification,
   };
 };

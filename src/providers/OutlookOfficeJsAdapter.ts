@@ -61,6 +61,33 @@ export class OutlookOfficeJsAdapter extends BaseAdapter {
     });
   }
 
+  setSubject(text: string): void {
+    const item = Office.context.mailbox.item as Office.MessageCompose | null;
+    item?.subject?.setAsync?.(text);
+  }
+
+  openCalendar(title = 'Email Follow-up', startDateTime?: string): void {
+    const url = new URL('https://outlook.office.com/calendar/0/deeplink/compose');
+    url.searchParams.set('path', '/calendar/action/compose');
+    url.searchParams.set('subject', title);
+
+    if (startDateTime) {
+      const startDate = new Date(startDateTime);
+      if (Number.isNaN(startDate.getTime())) {
+        console.warn('[OutlookOfficeJsAdapter] Invalid startDateTime passed to openCalendar:', startDateTime);
+        window.open(url.toString(), '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      const endDate = new Date(startDate);
+      endDate.setTime(startDate.getTime() + 60 * 60 * 1000);
+      url.searchParams.set('startdt', startDate.toISOString());
+      url.searchParams.set('enddt', endDate.toISOString());
+    }
+
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
+  }
+
   async sendEmail(payload?: SendEmailPayload): Promise<void> {
     if (payload?.html) {
       await new Promise<void>((resolve, reject) => {

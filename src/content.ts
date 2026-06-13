@@ -24,6 +24,7 @@ class UniversalComposerOverlay {
   private readonly adapter: ProviderAdapter;
   private sidebar: HTMLDivElement | null = null;
   private iframe: HTMLIFrameElement | null = null;
+  private iframeReady = false;
 
   constructor(adapter: ProviderAdapter) {
     this.adapter = adapter;
@@ -32,6 +33,46 @@ class UniversalComposerOverlay {
 
   mountForProvider(): void {
     this.injectAssistantButtons();
+  }
+
+  private async getActiveThread() {
+    return this.adapter.getThreadAsync
+      ? this.adapter.getThreadAsync()
+      : this.adapter.getThread();
+  }
+
+  private getSidebarTargetOrigin(): string | null {
+    if (!this.iframe?.src) return null;
+    try {
+      return new URL(this.iframe.src).origin;
+    } catch {
+      return null;
+    }
+  }
+
+  private async pushInitialContextToSidebar(): Promise<void> {
+    if (!this.iframe?.contentWindow) return;
+    const thread = await this.getActiveThread();
+    const provider = this.adapter.getProviderName();
+    const composeMode = this.adapter.getComposeMode();
+    const analysis = analyzeThreadContext(thread);
+    const targetOrigin = this.getSidebarTargetOrigin();
+    if (!targetOrigin) return;
+
+    this.iframe.contentWindow.postMessage({
+      type: 'THREAD_CONTEXT_RESPONSE',
+      provider,
+      composeMode,
+      thread,
+    }, targetOrigin);
+
+    this.iframe.contentWindow.postMessage({
+      type: 'CONTEXT_ENGINE_RESPONSE',
+      provider,
+      composeMode,
+      thread,
+      analysis,
+    }, targetOrigin);
   }
 
   private injectAssistantButtons(): void {
@@ -99,6 +140,10 @@ class UniversalComposerOverlay {
       this.iframe.style.width = '100%';
       this.iframe.style.height = 'calc(100% - 54px)';
       this.iframe.style.border = 'none';
+      this.iframe.addEventListener('load', () => {
+        this.iframeReady = true;
+        void this.pushInitialContextToSidebar();
+      });
 
       this.sidebar.appendChild(header);
       this.sidebar.appendChild(this.iframe);
@@ -112,6 +157,9 @@ class UniversalComposerOverlay {
     }
 
     this.sidebar.style.display = 'block';
+    if (this.iframeReady) {
+      void this.pushInitialContextToSidebar();
+    }
   }
 
   private readonly handleWindowMessage = async (event: MessageEvent<OverlayMessage>) => {
@@ -128,9 +176,7 @@ class UniversalComposerOverlay {
           break;
         }
         case 'REQUEST_THREAD_CONTEXT': {
-          const thread = this.adapter.getThreadAsync
-            ? await this.adapter.getThreadAsync()
-            : this.adapter.getThread();
+          const thread = await this.getActiveThread();
           event.source?.postMessage({
             type: 'THREAD_CONTEXT_RESPONSE',
             provider: this.adapter.getProviderName(),
@@ -140,9 +186,7 @@ class UniversalComposerOverlay {
           break;
         }
         case 'RUN_CONTEXT_ENGINE': {
-          const thread = this.adapter.getThreadAsync
-            ? await this.adapter.getThreadAsync()
-            : this.adapter.getThread();
+          const thread = await this.getActiveThread();
           const analysis = analyzeThreadContext(thread);
           event.source?.postMessage({
             type: 'CONTEXT_ENGINE_RESPONSE',

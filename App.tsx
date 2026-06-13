@@ -239,7 +239,15 @@ const App: React.FC = () => {
   }, [analysis, emailContext, generatedEmails, handleInsertIntoComposer, selectedRewriteMode, threadData?.participants, userInput]);
 
   const handleInsertSummary = useCallback(() => {
-    handleInsertIntoComposer(analysis?.summary || 'No summary available from context engine yet.');
+    const summaryText = analysis?.summary || 'No summary available from context engine yet.';
+    const escapedSummary = summaryText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+    const summaryHtml = `<p>${escapedSummary.replace(/\n/g, '<br/>')}</p>`;
+    handleInsertIntoComposer(summaryHtml);
   }, [analysis?.summary, handleInsertIntoComposer]);
 
   const handleGenerateSubject = useCallback(() => {

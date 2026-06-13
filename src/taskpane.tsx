@@ -43,7 +43,9 @@ type OverlayMessage =
   | { type: 'INSERT_EMAIL'; text: string }
   | { type: 'SEND_EMAIL'; payload?: { html?: string; sendImmediately?: boolean } }
   | { type: 'REQUEST_THREAD_CONTEXT' }
-  | { type: 'RUN_CONTEXT_ENGINE' };
+  | { type: 'RUN_CONTEXT_ENGINE' }
+  | { type: 'SET_SUBJECT'; text: string }
+  | { type: 'OPEN_CALENDAR'; title?: string; startDateTime?: string };
 
 /** Installs the message bridge between App's postMessage calls and the adapter. */
 function installMessageBridge(adapter: OutlookOfficeJsAdapter): void {
@@ -86,6 +88,14 @@ function installMessageBridge(adapter: OutlookOfficeJsAdapter): void {
             thread,
             analysis,
           });
+          break;
+        }
+        case 'SET_SUBJECT': {
+          adapter.setSubject(event.data.text);
+          break;
+        }
+        case 'OPEN_CALENDAR': {
+          adapter.openCalendar(event.data.title, event.data.startDateTime);
           break;
         }
         default:
