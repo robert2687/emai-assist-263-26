@@ -9,6 +9,10 @@ declare const chrome: {
   };
   runtime: {
     lastError?: { message?: string };
+    sendMessage(
+      message: GmailThreadRequest,
+      callback: (response?: GmailThreadResponse) => void,
+    ): void;
   };
 };
 
@@ -35,9 +39,19 @@ interface GmailApiMessage {
   };
 }
 
-interface GmailApiThread {
+export interface GmailApiThread {
   id: string;
   messages: GmailApiMessage[];
+}
+
+export interface GmailThreadRequest {
+  type: "GET_GMAIL_THREAD";
+  threadId: string;
+}
+
+export interface GmailThreadResponse {
+  thread?: GmailApiThread;
+  error?: string;
 }
 
 function getHeader(headers: GmailApiHeader[], name: string): string {
@@ -48,21 +62,32 @@ function getHeader(headers: GmailApiHeader[], name: string): string {
 
 function decodeBase64Url(data: string): string {
   const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "===".slice((base64.length + 3) % 4);
+
   try {
     return decodeURIComponent(
-      atob(base64)
+      atob(padded)
         .split("")
         .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
         .join(""),
     );
   } catch {
-    return atob(base64);
+    return atob(padded);
   }
+}
+
+function htmlToPlainText(html: string): string {
+  const documentRoot = document.implementation.createHTMLDocument("");
+  documentRoot.body.innerHTML = html;
+  return documentRoot.body.innerText?.trim() ?? documentRoot.body.textContent?.trim() ?? "";
 }
 
 function extractTextFromPart(part: GmailApiMessagePart): string {
   if (part.mimeType === "text/plain" && part.body?.data) {
     return decodeBase64Url(part.body.data);
+  }
+  if (part.mimeType === "text/html" && part.body?.data) {
+    return htmlToPlainText(decodeBase64Url(part.body.data));
   }
   if (part.parts) {
     for (const subPart of part.parts) {
@@ -86,7 +111,7 @@ function extractMessageBody(msg: GmailApiMessage): string {
   return "";
 }
 
-function parseGmailApiThread(thread: GmailApiThread): ThreadData {
+export function parseGmailApiThread(thread: GmailApiThread): ThreadData {
   const messages = thread.messages ?? [];
 
   const subject =
@@ -123,9 +148,9 @@ function parseGmailApiThread(thread: GmailApiThread): ThreadData {
 }
 
 /**
- * Acquires an OAuth2 access token via Google Identity Services
- * (chrome.identity.getAuthToken). Prompts the user interactively if
- * no cached token is available.
+ * Acquires an OAuth2 access token via the Chrome Extensions Identity API
+ * (chrome.identity.getAuthToken). Prompts the user interactively if no
+ * cached token is available.
  */
 export function getGmailAuthToken(): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -145,18 +170,40 @@ export function getGmailAuthToken(): Promise<string> {
  * Gmail URL format: https://mail.google.com/mail/u/0/#inbox/<hexThreadId>
  */
 export function getThreadIdFromUrl(): string | null {
-  const match = window.location.hash.match(/#[^/]+\/([0-9a-f]{6,})/i);
+  const match = window.location.hash.match(/#(?:[^/]+\/)*([0-9a-f]{6,})(?:$|[/?])/i);
   return match ? match[1] : null;
+}
+
+export function requestGmailThread(threadId: string): Promise<GmailApiThread> {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { type: "GET_GMAIL_THREAD", threadId },
+      (response) => {
+        const runtimeError = chrome.runtime.lastError?.message;
+        if (runtimeError) {
+          reject(new Error(`Failed to fetch Gmail thread: ${runtimeError}`));
+          return;
+        }
+
+        if (!response?.thread) {
+          reject(new Error(response?.error ?? "Missing Gmail thread response."));
+          return;
+        }
+
+        resolve(response.thread);
+      },
+    );
+  });
 }
 
 /**
  * Fetches a Gmail thread via the Gmail REST API and returns a
  * provider-agnostic ThreadData object.
  */
-export async function fetchGmailThreadData(
+export async function fetchGmailThread(
   threadId: string,
   token: string,
-): Promise<ThreadData> {
+): Promise<GmailApiThread> {
   const url = `${GMAIL_API_BASE}/threads/${encodeURIComponent(threadId)}?format=full`;
   const response = await fetch(url, {
     headers: { Authorization: 'Bearer ' + token },
@@ -166,6 +213,12 @@ export async function fetchGmailThreadData(
     throw new Error(`Gmail API error: ${response.status} ${response.statusText}`);
   }
 
-  const thread: GmailApiThread = await response.json();
-  return parseGmailApiThread(thread);
+  return response.json();
+}
+
+export async function fetchGmailThreadData(
+  threadId: string,
+  token: string,
+): Promise<ThreadData> {
+  return parseGmailApiThread(await fetchGmailThread(threadId, token));
 }

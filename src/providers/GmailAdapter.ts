@@ -1,6 +1,6 @@
 import { BaseAdapter } from './BaseAdapter';
 import { ComposeMode, ProviderName, SendEmailPayload, ThreadData, ThreadMessage } from './types';
-import { fetchGmailThreadData, getGmailAuthToken, getThreadIdFromUrl } from '../services/gmailApiService';
+import { getThreadIdFromUrl, parseGmailApiThread, requestGmailThread } from '../services/gmailApiService';
 
 const GMAIL_SELECTORS = {
   composeRoot: '.M9',
@@ -79,8 +79,7 @@ export class GmailAdapter extends BaseAdapter {
     try {
       const threadId = getThreadIdFromUrl();
       if (threadId) {
-        const token = await getGmailAuthToken();
-        return await fetchGmailThreadData(threadId, token);
+        return parseGmailApiThread(await requestGmailThread(threadId));
       }
     } catch {
       // API unavailable or auth declined — fall back to DOM extraction.
