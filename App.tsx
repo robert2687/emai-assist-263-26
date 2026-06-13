@@ -57,10 +57,10 @@ const App: React.FC = () => {
       }
     }
 
-    const effectiveProvider = storedProvider || 'gemini';
+    const resolvedProvider = storedProvider || 'gemini';
     const hasGeminiKey = !!(storedKey || process.env.GEMINI_API_KEY || process.env.API_KEY);
     const hasPerplexityKey = !!(storedPerplexityKey || process.env.PERPLEXITY_API_KEY);
-    if ((effectiveProvider === 'gemini' && !hasGeminiKey) || (effectiveProvider === 'perplexity' && !hasPerplexityKey)) {
+    if ((resolvedProvider === 'gemini' && !hasGeminiKey) || (resolvedProvider === 'perplexity' && !hasPerplexityKey)) {
       setIsSettingsModalOpen(true);
     }
 
