@@ -51,11 +51,10 @@ export class GmailAdapter extends BaseAdapter {
       .map((p) => p.trim())
       .filter(Boolean);
 
-    const editableEl = composeRoot.querySelector<HTMLElement>(GMAIL_SELECTORS.editable);
-    const currentDraft = (editableEl?.innerText || editableEl?.textContent || '').trim();
+    const currentDraft = composeRoot.querySelector<HTMLElement>(GMAIL_SELECTORS.editable)?.innerText?.trim() ?? '';
 
     const quotedMessages: ThreadMessage[] = Array.from(composeRoot.querySelectorAll<HTMLElement>(GMAIL_SELECTORS.quoteBlocks))
-      .map((el) => ({ body: (el.innerText ?? el.textContent ?? '').trim() }))
+      .map((el) => ({ body: el.innerText.trim() }))
       .filter((m) => m.body.length > 0);
 
     const messages: ThreadMessage[] = [
