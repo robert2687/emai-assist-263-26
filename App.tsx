@@ -1,7 +1,8 @@
 
 import React, { useState, useCallback } from 'react';
-import { EmailDraft, EmailMode, Tone } from './types';
+import { EmailDraft, EmailMode, Tone, ApiProvider } from './types';
 import { generateEmails } from './services/geminiService';
+import { generateEmailsWithPerplexity } from './services/perplexityService';
 import { TONES } from './constants';
 import ToneSelector from './components/ToneSelector';
 import EmailCard from './components/EmailCard';
@@ -19,6 +20,8 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isExtensionMode, setIsExtensionMode] = useState<boolean>(false);
   const [apiKey, setApiKey] = useState<string>('');
+  const [perplexityApiKey, setPerplexityApiKey] = useState<string>('');
+  const [apiProvider, setApiProvider] = useState<ApiProvider>('gemini');
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [signature, setSignature] = useState<string>('');
   const [includeSignature, setIncludeSignature] = useState<boolean>(true);
@@ -29,6 +32,11 @@ const App: React.FC = () => {
       setIsExtensionMode(true);
     }
 
+    const storedProvider = localStorage.getItem('api_provider') as ApiProvider | null;
+    if (storedProvider === 'perplexity' || storedProvider === 'gemini') {
+      setApiProvider(storedProvider);
+    }
+
     const storedKey = localStorage.getItem('gemini_api_key');
     if (storedKey) {
       setApiKey(storedKey);
@@ -36,9 +44,24 @@ const App: React.FC = () => {
       const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
       if (envKey) {
         setApiKey(envKey);
-      } else {
-        setIsSettingsModalOpen(true);
       }
+    }
+
+    const storedPerplexityKey = localStorage.getItem('perplexity_api_key');
+    if (storedPerplexityKey) {
+      setPerplexityApiKey(storedPerplexityKey);
+    } else {
+      const envPplxKey = process.env.PERPLEXITY_API_KEY || '';
+      if (envPplxKey) {
+        setPerplexityApiKey(envPplxKey);
+      }
+    }
+
+    const effectiveProvider = storedProvider || 'gemini';
+    const hasGeminiKey = !!(storedKey || process.env.GEMINI_API_KEY || process.env.API_KEY);
+    const hasPerplexityKey = !!(storedPerplexityKey || process.env.PERPLEXITY_API_KEY);
+    if ((effectiveProvider === 'gemini' && !hasGeminiKey) || (effectiveProvider === 'perplexity' && !hasPerplexityKey)) {
+      setIsSettingsModalOpen(true);
     }
 
     const storedSignature = localStorage.getItem('email_signature');
@@ -63,9 +86,13 @@ const App: React.FC = () => {
     localStorage.setItem('include_signature', String(newVal));
   };
 
-  const saveApiKey = (key: string) => {
-    setApiKey(key);
-    localStorage.setItem('gemini_api_key', key);
+  const saveSettings = (geminiKey: string, pplxKey: string, provider: ApiProvider) => {
+    setApiKey(geminiKey);
+    setPerplexityApiKey(pplxKey);
+    setApiProvider(provider);
+    localStorage.setItem('gemini_api_key', geminiKey);
+    localStorage.setItem('perplexity_api_key', pplxKey);
+    localStorage.setItem('api_provider', provider);
     setIsSettingsModalOpen(false);
   };
 
@@ -96,7 +123,12 @@ const App: React.FC = () => {
     setGeneratedEmails([]);
 
     try {
-      const result = await generateEmails(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), apiKey, signature, includeSignature);
+      let result: EmailDraft[];
+      if (apiProvider === 'perplexity') {
+        result = await generateEmailsWithPerplexity(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), perplexityApiKey, signature, includeSignature);
+      } else {
+        result = await generateEmails(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), apiKey, signature, includeSignature);
+      }
       setGeneratedEmails(result);
     } catch (e: any) {
       console.error(e);
@@ -107,7 +139,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [userInput, emailContext, writingStyleSample, emailMode, selectedTones, apiKey, signature, includeSignature]);
+  }, [userInput, emailContext, writingStyleSample, emailMode, selectedTones, apiKey, perplexityApiKey, apiProvider, signature, includeSignature]);
 
   return (
     <div className={`min-h-screen bg-gray-900 text-gray-200 font-sans ${isExtensionMode ? 'p-2' : ''}`}>
@@ -118,6 +150,24 @@ const App: React.FC = () => {
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-400"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
               Settings
             </h2>
+
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-300 mb-2">AI Provider</label>
+              <div className="flex bg-gray-700 rounded-lg p-1">
+                <button
+                  onClick={() => setApiProvider('gemini')}
+                  className={`w-1/2 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'gemini' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                >
+                  Google Gemini
+                </button>
+                <button
+                  onClick={() => setApiProvider('perplexity')}
+                  className={`w-1/2 py-2 rounded-md transition-colors duration-300 text-sm font-medium ${apiProvider === 'perplexity' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-600'}`}
+                >
+                  Perplexity
+                </button>
+              </div>
+            </div>
             
             <div className="mb-6">
               <label className="block text-sm font-semibold text-gray-300 mb-2">Google Gemini API Key</label>
@@ -130,6 +180,20 @@ const App: React.FC = () => {
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="AIzaSy..."
                 className="w-full p-3 bg-gray-900 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-300 mb-2">Perplexity API Key</label>
+              <p className="text-gray-400 text-xs mb-2 leading-relaxed">
+                Your key is stored locally in your browser and never sent to our servers.
+              </p>
+              <input
+                type="password"
+                value={perplexityApiKey}
+                onChange={(e) => setPerplexityApiKey(e.target.value)}
+                placeholder="pplx-..."
+                className="w-full p-3 bg-gray-900 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition duration-200"
               />
             </div>
 
@@ -165,8 +229,8 @@ const App: React.FC = () => {
                 Cancel
               </button>
               <button 
-                onClick={() => saveApiKey(apiKey)} 
-                disabled={!apiKey.trim()}
+                onClick={() => saveSettings(apiKey, perplexityApiKey, apiProvider)} 
+                disabled={apiProvider === 'gemini' ? !apiKey.trim() : !perplexityApiKey.trim()}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Save Settings
