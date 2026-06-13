@@ -63,7 +63,11 @@ export class OutlookOfficeJsAdapter extends BaseAdapter {
 
   setSubject(text: string): void {
     const item = Office.context.mailbox.item as Office.MessageCompose | null;
-    item?.subject?.setAsync?.(text);
+    item?.subject?.setAsync?.(text, (result) => {
+      if (result.status !== Office.AsyncResultStatus.Succeeded) {
+        console.error('[OutlookOfficeJsAdapter] Failed to set subject:', result.error?.message ?? 'Unknown error');
+      }
+    });
   }
 
   openCalendar(title = 'Email Follow-up', startDateTime?: string): void {
@@ -72,7 +76,8 @@ export class OutlookOfficeJsAdapter extends BaseAdapter {
     url.searchParams.set('subject', title);
 
     if (startDateTime) {
-      const startDate = new Date(startDateTime);
+      const startIso = `${startDateTime}:00`;
+      const startDate = new Date(startIso);
       if (Number.isNaN(startDate.getTime())) {
         console.warn('[OutlookOfficeJsAdapter] Invalid startDateTime passed to openCalendar:', startDateTime);
         window.open(url.toString(), '_blank', 'noopener,noreferrer');
@@ -81,8 +86,9 @@ export class OutlookOfficeJsAdapter extends BaseAdapter {
 
       const endDate = new Date(startDate);
       endDate.setTime(startDate.getTime() + 60 * 60 * 1000);
-      url.searchParams.set('startdt', startDate.toISOString());
-      url.searchParams.set('enddt', endDate.toISOString());
+      const endIso = endDate.toISOString().slice(0, 19);
+      url.searchParams.set('startdt', startIso);
+      url.searchParams.set('enddt', endIso);
     }
 
     window.open(url.toString(), '_blank', 'noopener,noreferrer');

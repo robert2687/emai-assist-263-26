@@ -119,10 +119,10 @@ export const extractTasksAndDeadlines = (thread: ThreadData): { tasks: string[];
 
 export const generateSummary = (thread: ThreadData): string => summarize(thread);
 
-export const suggestSubjects = (thread: ThreadData): string[] => {
-  const sentiment = analyzeSentiment(thread);
-  const { tasks } = extractTasksAndDeadlines(thread);
-  return subjectSuggestions(thread, tasks, sentiment);
+export const suggestSubjects = (thread: ThreadData, tasks?: string[], sentiment?: Sentiment): string[] => {
+  const resolvedSentiment = sentiment ?? analyzeSentiment(thread);
+  const resolvedTasks = tasks ?? extractTasksAndDeadlines(thread).tasks;
+  return subjectSuggestions(thread, resolvedTasks, resolvedSentiment);
 };
 
 export const classifyGrantContext = (thread: ThreadData): GrantClassification => classifyGrant(thread);
@@ -142,7 +142,7 @@ export const analyzeThreadContext = (thread: ThreadData): ContextEngineOutput =>
     tasks,
     deadlines,
     nextSteps,
-    subjectSuggestions: suggestSubjects(thread),
+    subjectSuggestions: suggestSubjects(thread, tasks, sentiment),
     grantClassification,
   };
 };

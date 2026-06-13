@@ -246,7 +246,7 @@ const App: React.FC = () => {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
-    const summaryHtml = `<p>${escapedSummary.replace(/\n/g, '<br/>')}</p>`;
+    const summaryHtml = `<p>${escapedSummary.replace(/\r\n|\r|\n/g, '<br/>')}</p>`;
     handleInsertIntoComposer(summaryHtml);
   }, [analysis?.summary, handleInsertIntoComposer]);
 
