@@ -41,7 +41,9 @@
 - **Sentiment detection** — the AI detects and labels the emotional tone of each draft
 - **Alternative subject lines** — each draft ships with 1–3 extra subject line options
 - **Email signature management** — store your signature locally; toggle inclusion per session
-- **Gmail Extension mode** — embed the app inside Gmail's compose window via iframe
+- **Provider-aware extension mode** — embed the app inside Gmail, Outlook, and Zoho Mail compose flows
+- **Context Engine v2** — extract thread text, detect language/sentiment, identify tasks and deadlines, and classify grant-related conversations
+- **Email Intelligence Hub** — smart replies, subject suggestions, templates, summary insert, and calendar shortcuts from one shared overlay
 - **Multi-language support** — translates and drafts in EN / SK / CZ / DE
 - **API key stored locally** — your Gemini key never leaves your browser
 
@@ -126,10 +128,20 @@ Open Settings → paste your signature text → toggle the **Include** switch. T
 
 ---
 
-## 🔌 Gmail Extension Mode
+## 🔌 Provider Extension Mode
 
-Append `?extension=true` to the app URL to activate Gmail Extension Mode.  
-In this mode the UI is compact and each draft shows an **Insert to Gmail** button that uses `window.parent.postMessage` to inject the text into the active Gmail compose window.
+The extension content script injects a shared **Email Intelligence Hub** overlay into supported providers:
+
+- Gmail
+- Outlook Web / Outlook Live
+- Zoho Mail
+
+In extension mode, the overlay:
+
+- detects the active provider and compose mode
+- pulls thread context into Context Engine v2
+- offers smart replies, summary insertion, subject suggestions, and calendar shortcuts
+- inserts generated drafts back into the active composer through provider adapters
 
 ---
 
@@ -217,12 +229,15 @@ paste into files.
 │   ├── ToneSelector.tsx    # Multi-select tone chip buttons
 │   └── icons.tsx           # SVG icon components
 ├── services/
+│   ├── contextEngine.ts    # Provider-agnostic thread analysis and grant classification
 │   └── geminiService.ts    # Gemini API integration & prompt construction
-├── App.tsx                 # Root component — state, layout, settings modal
+├── App.tsx                 # Email Intelligence Hub UI and overlay workflow
 ├── constants.ts            # Tone list and other shared constants
 ├── types.ts                # Shared TypeScript types & interfaces
 ├── index.tsx               # React entry point
 ├── index.html              # HTML shell
 ├── vite.config.ts          # Vite + Tailwind + Cloudflare plugin config
+├── src/content.ts          # Provider-aware overlay injection content script
+├── src/providerAdapters.ts # Gmail / Outlook / Zoho / fallback adapter layer
 └── wrangler.jsonc          # Cloudflare Workers deployment config
 ```

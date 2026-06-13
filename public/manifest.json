@@ -1,22 +1,32 @@
 {
   "manifest_version": 3,
-  "name": "AI Email Assistant for Gmail",
+  "name": "AI Email Assistant",
   "version": "1.0.0",
-  "description": "Craft perfect emails directly in Gmail using AI.",
+  "description": "Craft provider-aware emails in Gmail, Outlook, and Zoho Mail using AI.",
   "permissions": ["activeTab", "scripting", "storage"],
   "action": {
     "default_popup": "index.html"
   },
   "content_scripts": [
     {
-      "matches": ["https://mail.google.com/*"],
+      "matches": [
+        "https://mail.google.com/*",
+        "https://outlook.office.com/*",
+        "https://outlook.live.com/*",
+        "https://mail.zoho.com/*"
+      ],
       "js": ["content.js"]
     }
   ],
   "web_accessible_resources": [
     {
       "resources": ["index.html", "assets/*"],
-      "matches": ["https://mail.google.com/*"]
+      "matches": [
+        "https://mail.google.com/*",
+        "https://outlook.office.com/*",
+        "https://outlook.live.com/*",
+        "https://mail.zoho.com/*"
+      ]
     }
   ],
   "icons": {
