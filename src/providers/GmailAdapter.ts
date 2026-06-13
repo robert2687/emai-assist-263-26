@@ -70,10 +70,9 @@ export class GmailAdapter extends BaseAdapter {
   }
 
   /**
-   * Fetches the full thread via the Gmail REST API (threads.get) using an
-   * OAuth2 token obtained through Google Identity Services. Falls back to
-   * DOM-based extraction if no thread ID is found in the URL or if the API
-   * call fails.
+   * Fetches the full thread via the Gmail REST API (threads.get) through the
+   * extension background context. Falls back to DOM-based extraction if no
+   * thread ID is found in the URL or if the API call fails.
    */
   async getThreadAsync(): Promise<ThreadData> {
     try {
