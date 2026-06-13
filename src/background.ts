@@ -36,7 +36,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
-  void handleGmailThreadRequest(message.threadId).then(sendResponse);
+  handleGmailThreadRequest(message.threadId).then(
+    sendResponse,
+    (error) => {
+      sendResponse({
+        error: error instanceof Error ? error.message : "Unknown Gmail API error.",
+      });
+    },
+  );
 
   return true;
 });

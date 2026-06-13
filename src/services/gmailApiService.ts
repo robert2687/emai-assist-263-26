@@ -79,7 +79,7 @@ function decodeBase64Url(data: string): string {
 
 function htmlToPlainText(html: string): string {
   const documentRoot = new DOMParser().parseFromString(html, "text/html");
-  return documentRoot.body.innerText?.trim() ?? documentRoot.body.textContent?.trim() ?? "";
+  return documentRoot.body.textContent?.trim() ?? "";
 }
 
 function extractTextFromPart(part: GmailApiMessagePart): string {
@@ -186,7 +186,7 @@ export function requestGmailThread(threadId: string): Promise<GmailApiThread> {
         }
 
         if (!response?.thread) {
-          reject(new Error(response?.error ?? "Background service returned empty response without error."));
+          reject(new Error(response?.error ?? `Background service returned no thread data for ${threadId}.`));
           return;
         }
 
