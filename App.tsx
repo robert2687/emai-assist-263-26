@@ -153,9 +153,6 @@ const App: React.FC = () => {
       (resolvedProvider === 'perplexity' && !hasPerplexityKey) ||
       (resolvedProvider === 'openrouter' && !hasOpenrouterKey)
     ) {
-    const hasGeminiKey = !!(process.env.GEMINI_API_KEY || process.env.API_KEY);
-    const hasPerplexityKey = !!process.env.PERPLEXITY_API_KEY;
-    if ((resolvedProvider === 'gemini' && !hasGeminiKey) || (resolvedProvider === 'perplexity' && !hasPerplexityKey)) {
       setIsSettingsModalOpen(true);
     }
 
