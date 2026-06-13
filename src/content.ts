@@ -75,6 +75,12 @@ class UniversalComposerOverlay {
     }, targetOrigin);
   }
 
+  private pushInitialContextToSidebarSafely(): void {
+    void this.pushInitialContextToSidebar().catch((error) => {
+      console.error('[UniversalComposerOverlay] Failed to push initial context:', error);
+    });
+  }
+
   private injectAssistantButtons(): void {
     this.adapter.findComposeRoots().forEach((composeRoot, index) => {
       const toolbar = this.adapter.getToolbarForCompose(composeRoot);
@@ -142,7 +148,7 @@ class UniversalComposerOverlay {
       this.iframe.style.border = 'none';
       this.iframe.addEventListener('load', () => {
         this.iframeReady = true;
-        void this.pushInitialContextToSidebar();
+        this.pushInitialContextToSidebarSafely();
       });
 
       this.sidebar.appendChild(header);
@@ -158,7 +164,7 @@ class UniversalComposerOverlay {
 
     this.sidebar.style.display = 'block';
     if (this.iframeReady) {
-      void this.pushInitialContextToSidebar();
+      this.pushInitialContextToSidebarSafely();
     }
   }
 
