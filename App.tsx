@@ -297,11 +297,11 @@ const App: React.FC = () => {
     try {
       let result: EmailDraft[];
       if (apiProvider === 'perplexity') {
-        result = await generateEmailsWithPerplexity(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), perplexityApiKey, signature, includeSignature);
+        result = await generateEmailsWithPerplexity(userInput, enrichedContext, writingStyleSample, emailMode, Array.from(selectedTones), perplexityApiKey, signature, includeSignature);
       } else if (apiProvider === 'openrouter') {
-        result = await generateEmailsWithGPT(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), openrouterApiKey, signature, includeSignature);
+        result = await generateEmailsWithGPT(userInput, enrichedContext, writingStyleSample, emailMode, Array.from(selectedTones), openrouterApiKey, signature, includeSignature);
       } else {
-        result = await generateEmails(userInput, emailContext, writingStyleSample, emailMode, Array.from(selectedTones), apiKey, signature, includeSignature);
+        result = await generateEmails(userInput, enrichedContext, writingStyleSample, emailMode, Array.from(selectedTones), apiKey, signature, includeSignature);
       }
       setGeneratedEmails(result);
     } catch (generationError: unknown) {
