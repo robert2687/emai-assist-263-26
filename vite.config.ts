@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
         rollupOptions: {
           input: {
             main: path.resolve(__dirname, 'index.html'),
+            taskpane: path.resolve(__dirname, 'taskpane.html'),
             content: path.resolve(__dirname, 'src/content.ts'),
           },
           output: {
