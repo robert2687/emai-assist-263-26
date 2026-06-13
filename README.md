@@ -11,7 +11,7 @@
 [![Gemini](https://img.shields.io/badge/Google%20Gemini-2.5%20Flash-4285F4?logo=google)](https://ai.google.dev/)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare%20Workers-deployed-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
 
-[Live App on AI Studio](https://ai.studio/apps/c9aa93db-6102-4545-b107-108a55317f93)
+[Live App](https://emai-assist-263-26.workers.dev)
 
 </div>
 
