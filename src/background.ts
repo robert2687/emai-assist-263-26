@@ -19,22 +19,24 @@ declare const chrome: {
   };
 };
 
+async function handleGmailThreadRequest(threadId: string): Promise<GmailThreadResponse> {
+  try {
+    const token = await getGmailAuthToken();
+    const thread = await fetchGmailThread(threadId, token);
+    return { thread };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Unknown Gmail API error.",
+    };
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== "GET_GMAIL_THREAD") {
     return false;
   }
 
-  void (async () => {
-    try {
-      const token = await getGmailAuthToken();
-      const thread = await fetchGmailThread(message.threadId, token);
-      sendResponse({ thread });
-    } catch (error) {
-      sendResponse({
-        error: error instanceof Error ? error.message : "Unknown Gmail API error.",
-      });
-    }
-  })();
+  void handleGmailThreadRequest(message.threadId).then(sendResponse);
 
   return true;
 });

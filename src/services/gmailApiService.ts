@@ -62,7 +62,8 @@ function getHeader(headers: GmailApiHeader[], name: string): string {
 
 function decodeBase64Url(data: string): string {
   const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64 + "===".slice((base64.length + 3) % 4);
+  const paddingLength = (4 - (base64.length % 4)) % 4;
+  const padded = base64.padEnd(base64.length + paddingLength, "=");
 
   try {
     return decodeURIComponent(
@@ -185,7 +186,7 @@ export function requestGmailThread(threadId: string): Promise<GmailApiThread> {
         }
 
         if (!response?.thread) {
-          reject(new Error(response?.error ?? "Missing Gmail thread response."));
+          reject(new Error(response?.error ?? "No thread data returned from background service."));
           return;
         }
 
