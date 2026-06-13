@@ -169,17 +169,12 @@ export class ZohoAdapter extends BaseAdapter {
       .map((p) => p.trim())
       .filter(Boolean);
 
-    const currentDraft =
-      composeRoot.querySelector<HTMLElement>(ZOHO_SELECTORS.editable)?.innerText?.trim() ?? '';
+    const editableEl = composeRoot.querySelector<HTMLElement>(ZOHO_SELECTORS.editable);
+    const currentDraft = (editableEl?.innerText || editableEl?.textContent || '').trim();
 
     const quotedMessages: ThreadMessage[] = Array.from(
       composeRoot.querySelectorAll<HTMLElement>(ZOHO_SELECTORS.quoteBlocks),
     )
-      .map((el) => ({ body: el.innerText.trim() }))
-    const editableEl = composeRoot.querySelector<HTMLElement>(ZOHO_SELECTORS.editable);
-    const currentDraft = (editableEl?.innerText || editableEl?.textContent || '').trim();
-    const currentDraft = composeRoot.querySelector<HTMLElement>(ZOHO_SELECTORS.editable)?.innerText?.trim() ?? '';
-    const quotedMessages: ThreadMessage[] = Array.from(composeRoot.querySelectorAll<HTMLElement>(ZOHO_SELECTORS.quoteBlocks))
       .map((el) => ({ body: el.innerText.trim() }))
       .filter((msg) => msg.body.length > 0);
 
@@ -239,6 +234,23 @@ export class ZohoAdapter extends BaseAdapter {
 
     editable.innerHTML = this.sanitizeInsertedHtml(html);
     editable.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  setSubject(text: string): void {
+    const composeRoot = this.requireActiveComposeRoot();
+    const subjectInput = composeRoot.querySelector<HTMLInputElement>(ZOHO_SELECTORS.subject);
+    if (!subjectInput) return;
+    subjectInput.value = text;
+    subjectInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  openCalendar(title = 'Email Follow-up', startDateTime?: string): void {
+    const url = new URL('https://calendar.zoho.com');
+    url.searchParams.set('title', title);
+    if (startDateTime) {
+      url.searchParams.set('start', startDateTime);
+    }
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
   }
 
   async sendEmail(payload?: SendEmailPayload): Promise<void> {

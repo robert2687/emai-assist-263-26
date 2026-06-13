@@ -31,6 +31,8 @@ export interface ProviderAdapter {
    */
   getThreadAsync?(): Promise<ThreadData>;
   insertIntoComposer(html: string): void;
+  setSubject(text: string): void;
+  openCalendar(title?: string, startDateTime?: string): void;
   sendEmail(payload?: SendEmailPayload): Promise<void>;
 
   /**

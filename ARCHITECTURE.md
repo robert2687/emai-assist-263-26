@@ -8,6 +8,8 @@ All providers implement a shared interface in `src/providers/types.ts` (`Provide
 - `getComposeMode()` → `reply | forward | new`
 - `getThread()` → `{ subject, participants, messages }`
 - `insertIntoComposer(html)`
+- `setSubject(text)` — writes the subject field via DOM for the active compose window
+- `openCalendar(title?, startDateTime?)` — opens the provider-specific calendar deep link
 - `sendEmail(payload)`
 
 Concrete adapters:
@@ -33,6 +35,8 @@ Message contracts from overlay to content script:
 - `SEND_EMAIL`
 - `REQUEST_THREAD_CONTEXT`
 - `RUN_CONTEXT_ENGINE`
+- `SET_SUBJECT` — sets the subject field via the active adapter
+- `OPEN_CALENDAR` — opens the provider-specific calendar (Google, Outlook, Zoho) with optional title and startDateTime
 
 Response events back to overlay:
 
