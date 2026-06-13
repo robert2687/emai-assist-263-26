@@ -21,7 +21,7 @@ declare const chrome: {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== "GET_GMAIL_THREAD") {
-    return undefined;
+    return false;
   }
 
   void (async () => {

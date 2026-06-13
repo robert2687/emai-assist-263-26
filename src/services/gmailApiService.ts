@@ -77,8 +77,7 @@ function decodeBase64Url(data: string): string {
 }
 
 function htmlToPlainText(html: string): string {
-  const documentRoot = document.implementation.createHTMLDocument("");
-  documentRoot.body.innerHTML = html;
+  const documentRoot = new DOMParser().parseFromString(html, "text/html");
   return documentRoot.body.innerText?.trim() ?? documentRoot.body.textContent?.trim() ?? "";
 }
 
@@ -170,7 +169,7 @@ export function getGmailAuthToken(): Promise<string> {
  * Gmail URL format: https://mail.google.com/mail/u/0/#inbox/<hexThreadId>
  */
 export function getThreadIdFromUrl(): string | null {
-  const match = window.location.hash.match(/#(?:[^/]+\/)*([0-9a-f]{6,})(?:$|[/?])/i);
+  const match = window.location.hash.match(/#(?:[^/]+\/)*([0-9a-f]{6,})(?:$|\/)/i);
   return match ? match[1] : null;
 }
 
