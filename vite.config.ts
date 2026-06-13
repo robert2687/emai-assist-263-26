@@ -20,17 +20,22 @@ export default defineConfig(({ mode }) => {
             main: path.resolve(__dirname, 'index.html'),
             taskpane: path.resolve(__dirname, 'taskpane.html'),
             content: path.resolve(__dirname, 'src/content.ts'),
+            background: path.resolve(__dirname, 'src/background.ts'),
           },
           output: {
             entryFileNames: (chunkInfo) => {
-              return chunkInfo.name === 'content' ? '[name].js' : 'assets/[name]-[hash].js';
+              return ['content', 'background'].includes(chunkInfo.name)
+                ? '[name].js'
+                : 'assets/[name]-[hash].js';
             },
           },
         },
       },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        'process.env.ZOHO_CLIENT_ID': JSON.stringify(env.ZOHO_CLIENT_ID ?? ''),
+        'process.env.ZOHO_REDIRECT_URI': JSON.stringify(env.ZOHO_REDIRECT_URI ?? ''),
       },
       resolve: {
         alias: {

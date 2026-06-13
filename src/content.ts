@@ -16,7 +16,9 @@ type OverlayMessage =
   | { type: 'INSERT_EMAIL'; text: string }
   | { type: 'SEND_EMAIL'; payload?: { html?: string; sendImmediately?: boolean } }
   | { type: 'REQUEST_THREAD_CONTEXT' }
-  | { type: 'RUN_CONTEXT_ENGINE' };
+  | { type: 'RUN_CONTEXT_ENGINE' }
+  | { type: 'SET_SUBJECT'; text: string }
+  | { type: 'OPEN_CALENDAR'; title?: string; startDateTime?: string };
 
 class UniversalComposerOverlay {
   private readonly adapter: ProviderAdapter;
@@ -126,7 +128,9 @@ class UniversalComposerOverlay {
           break;
         }
         case 'REQUEST_THREAD_CONTEXT': {
-          const thread = this.adapter.getThread();
+          const thread = this.adapter.getThreadAsync
+            ? await this.adapter.getThreadAsync()
+            : this.adapter.getThread();
           event.source?.postMessage({
             type: 'THREAD_CONTEXT_RESPONSE',
             provider: this.adapter.getProviderName(),
@@ -136,7 +140,9 @@ class UniversalComposerOverlay {
           break;
         }
         case 'RUN_CONTEXT_ENGINE': {
-          const thread = this.adapter.getThread();
+          const thread = this.adapter.getThreadAsync
+            ? await this.adapter.getThreadAsync()
+            : this.adapter.getThread();
           const analysis = analyzeThreadContext(thread);
           event.source?.postMessage({
             type: 'CONTEXT_ENGINE_RESPONSE',
@@ -145,6 +151,14 @@ class UniversalComposerOverlay {
             thread,
             analysis,
           }, '*');
+          break;
+        }
+        case 'SET_SUBJECT': {
+          this.adapter.setSubject(event.data.text);
+          break;
+        }
+        case 'OPEN_CALENDAR': {
+          this.adapter.openCalendar(event.data.title, event.data.startDateTime);
           break;
         }
         default:

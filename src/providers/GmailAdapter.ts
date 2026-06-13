@@ -1,5 +1,6 @@
 import { BaseAdapter } from './BaseAdapter';
 import { ComposeMode, ProviderName, SendEmailPayload, ThreadData, ThreadMessage } from './types';
+import { getThreadIdFromUrl, parseGmailApiThread, requestGmailThread } from '../services/gmailApiService';
 
 const GMAIL_SELECTORS = {
   composeRoot: '.M9',
@@ -68,6 +69,23 @@ export class GmailAdapter extends BaseAdapter {
     };
   }
 
+  /**
+   * Fetches the full thread via the Gmail REST API (threads.get) through the
+   * extension background context. Falls back to DOM-based extraction if no
+   * thread ID is found in the URL or if the API call fails.
+   */
+  async getThreadAsync(): Promise<ThreadData> {
+    try {
+      const threadId = getThreadIdFromUrl();
+      if (threadId) {
+        return parseGmailApiThread(await requestGmailThread(threadId));
+      }
+    } catch {
+      // API unavailable or auth declined — fall back to DOM extraction.
+    }
+    return this.getThread();
+  }
+
   insertIntoComposer(html: string): void {
     const composeRoot = this.requireActiveComposeRoot();
     const editable = composeRoot.querySelector<HTMLElement>(GMAIL_SELECTORS.editable);
@@ -77,6 +95,24 @@ export class GmailAdapter extends BaseAdapter {
 
     editable.innerHTML = this.sanitizeInsertedHtml(html);
     editable.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  setSubject(text: string): void {
+    const composeRoot = this.requireActiveComposeRoot();
+    const subjectInput = composeRoot.querySelector<HTMLInputElement>(GMAIL_SELECTORS.subject);
+    if (!subjectInput) return;
+    subjectInput.value = text;
+    subjectInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  openCalendar(title = 'Email Follow-up', startDateTime?: string): void {
+    const url = new URL('https://calendar.google.com/calendar/u/0/r/eventedit');
+    url.searchParams.set('text', title);
+    if (startDateTime) {
+      const compact = startDateTime.replace(/[-:T]/g, '').split(/[+Z]/)[0] + '00';
+      url.searchParams.set('dates', `${compact}/${compact}`);
+    }
+    window.open(url.toString(), '_blank', 'noopener,noreferrer');
   }
 
   async sendEmail(payload?: SendEmailPayload): Promise<void> {

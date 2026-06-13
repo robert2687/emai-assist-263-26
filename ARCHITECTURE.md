@@ -8,6 +8,8 @@ All providers implement a shared interface in `src/providers/types.ts` (`Provide
 - `getComposeMode()` → `reply | forward | new`
 - `getThread()` → `{ subject, participants, messages }`
 - `insertIntoComposer(html)`
+- `setSubject(text)` — writes the subject field via DOM for the active compose window
+- `openCalendar(title?, startDateTime?)` — opens the provider-specific calendar deep link
 - `sendEmail(payload)`
 
 Concrete adapters:
@@ -34,6 +36,8 @@ Message contracts from overlay to content script:
 - `SEND_EMAIL`
 - `REQUEST_THREAD_CONTEXT`
 - `RUN_CONTEXT_ENGINE`
+- `SET_SUBJECT` — sets the subject field via the active adapter
+- `OPEN_CALENDAR` — opens the provider-specific calendar (Google, Outlook, Zoho) with optional title and startDateTime
 
 Response events back to overlay:
 
@@ -109,4 +113,62 @@ The overlay is designed as a universal micro-UI where provider-specific data is 
 - Generate subject
 - Schedule send
 - Add to calendar
+
+## 5) Zoho Mail Integration
+
+`ZohoAdapter` supports two deployment modes that are detected automatically at runtime.
+
+### 5a) Zoho Mail Extension platform (ZOHO.ZMailClient SDK present)
+
+When `window.ZOHO.ZMailClient` is available the adapter uses Zoho's official
+Extension SDK instead of DOM scraping:
+
+| Concern | SDK API used |
+|---------|-------------|
+| Composer detection | `ZOHO.ZMailClient.ON('ON_COMPOSE_OPEN' | 'ON_REPLY_OPEN' | 'ON_FORWARD_OPEN', handler)` |
+| Compose close | `ZOHO.ZMailClient.ON('ON_COMPOSE_CLOSE', handler)` |
+| Insert body | `ZOHO.ZMailClient.set('mail.compose.body', { body, composeId })` |
+| Send email | `ZOHO.ZMailClient.invoke('ZMailCompose.send', { composeId })` |
+| Overlay mount | `ZOHO.ZMailClient.invoke('ZMailInject.injectPanel', { composeId, url, width, title })` |
+| SDK init | `ZOHO.embeddedApp.on('PageLoad', …)` then `ZOHO.embeddedApp.init()` |
+
+Thread data is enriched via the **Zoho Mail REST API** when a `threadId` is
+available from the SDK event payload (see §5b).
+
+TypeScript declarations for the Zoho SDK globals live in
+`src/providers/zoho/ZohoExtensionSdk.d.ts`.
+
+### 5b) Zoho OAuth 2.0 + Mail REST API
+
+For thread/conversation data the adapter fetches from the Zoho Mail API using
+an OAuth 2.0 PKCE flow managed by `ZohoOAuthService`.
+
+| Component | File |
+|-----------|------|
+| OAuth2 PKCE service | `src/providers/zoho/ZohoOAuthService.ts` |
+| Zoho Mail API client | `src/providers/zoho/ZohoMailApiClient.ts` |
+
+**OAuth scopes required:** `ZohoMail.messages.READ,ZohoMail.accounts.READ`
+
+**Environment variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `ZOHO_CLIENT_ID` | OAuth 2.0 client ID from the Zoho Developer Console |
+| `ZOHO_REDIRECT_URI` | Redirect URI registered in the Zoho Developer Console |
+
+These can also be stored at runtime via `localStorage` under the keys
+`zoho_client_id` and `zoho_redirect_uri`.
+
+**API endpoints used:**
+
+- `GET https://mail.zoho.com/api/accounts` — resolve primary account ID
+- `GET https://mail.zoho.com/api/accounts/{accountId}/messages/thread/{threadId}` — fetch thread messages
+
+### 5c) Browser-extension fallback (DOM-only mode)
+
+When the ZOHO SDK is absent (e.g. running as a Chrome content script on
+`mail.zoho.com`), all operations fall back to the existing DOM-selector
+approach using `ZOHO_SELECTORS`. The OAuth/API layer is still available for
+thread enrichment as long as credentials are configured.
 
