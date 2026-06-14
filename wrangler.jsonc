@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "emai-assist-263-26",
+  "name": "email-assist-26",
   "compatibility_date": "2025-09-27",
   "observability": {
     "enabled": false,
