@@ -11,7 +11,9 @@
     ],
     "skipLibCheck": true,
     "types": [
-      "node"
+      "node",
+      "vite/client",
+      "office-js"
     ],
     "moduleResolution": "bundler",
     "isolatedModules": true,
@@ -25,5 +27,17 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "App.tsx",
+    "constants.ts",
+    "index.tsx",
+    "types.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ],
+  "exclude": [
+    "services",
+    "src/providerAdapters.ts"
+  ]
 }

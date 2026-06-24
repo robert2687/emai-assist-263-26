@@ -20,6 +20,15 @@ type OverlayMessage =
   | { type: 'SET_SUBJECT'; text: string }
   | { type: 'OPEN_CALENDAR'; title?: string; startDateTime?: string };
 
+const postMessageToSource = (source: MessageEventSource | null, payload: unknown): void => {
+  if (source && 'postMessage' in source) {
+    (source as WindowProxy).postMessage(payload, { targetOrigin: '*' });
+    return;
+  }
+
+  window.postMessage(payload, { targetOrigin: '*' });
+};
+
 class UniversalComposerOverlay {
   private readonly adapter: ProviderAdapter;
   private sidebar: HTMLDivElement | null = null;
@@ -183,24 +192,24 @@ class UniversalComposerOverlay {
         }
         case 'REQUEST_THREAD_CONTEXT': {
           const thread = await this.getActiveThread();
-          event.source?.postMessage({
+          postMessageToSource(event.source, {
             type: 'THREAD_CONTEXT_RESPONSE',
             provider: this.adapter.getProviderName(),
             composeMode: this.adapter.getComposeMode(),
             thread,
-          }, '*');
+          });
           break;
         }
         case 'RUN_CONTEXT_ENGINE': {
           const thread = await this.getActiveThread();
           const analysis = analyzeThreadContext(thread);
-          event.source?.postMessage({
+          postMessageToSource(event.source, {
             type: 'CONTEXT_ENGINE_RESPONSE',
             provider: this.adapter.getProviderName(),
             composeMode: this.adapter.getComposeMode(),
             thread,
             analysis,
-          }, '*');
+          });
           break;
         }
         case 'SET_SUBJECT': {
@@ -215,10 +224,10 @@ class UniversalComposerOverlay {
           break;
       }
     } catch (error) {
-      event.source?.postMessage({
+      postMessageToSource(event.source, {
         type: 'AI_ASSISTANT_ERROR',
         message: error instanceof Error ? error.message : 'Unknown overlay error.',
-      }, '*');
+      });
     }
   };
 }
