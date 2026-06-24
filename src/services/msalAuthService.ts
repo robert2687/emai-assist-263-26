@@ -22,7 +22,6 @@ export class MsalAuthService {
       },
       cache: {
         cacheLocation: 'sessionStorage',
-        storeAuthStateInCookie: false,
       },
     };
     this.msalInstance = new PublicClientApplication(config);

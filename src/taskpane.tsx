@@ -54,7 +54,12 @@ function installMessageBridge(adapter: OutlookOfficeJsAdapter): void {
 
     const reply = (payload: unknown) => {
       // When window.parent === window, event.source is also window.
-      (event.source ?? window).postMessage(payload, '*');
+      if (event.source && 'postMessage' in event.source) {
+        (event.source as WindowProxy).postMessage(payload, { targetOrigin: '*' });
+        return;
+      }
+
+      window.postMessage(payload, { targetOrigin: '*' });
     };
 
     try {
